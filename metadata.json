@@ -1,0 +1,8 @@
+{
+  "name": "ManagerPro by Rivera",
+  "description": "Sistema de control de restaurante con roles para Mesero, Cocina, Caja y Gerente en Quetzales (Q)",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

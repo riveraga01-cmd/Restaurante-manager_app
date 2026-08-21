@@ -1,0 +1,405 @@
+package com.example.data.dao
+
+import androidx.room.*
+import com.example.data.entity.*
+import kotlinx.coroutines.flow.Flow
+
+@Dao
+interface RestaurantDao {
+
+    // --- USERS / EMPLOYEES ---
+    @Query("SELECT * FROM users ORDER BY name ASC")
+    fun getAllUsers(): Flow<List<UserEntity>>
+
+    @Query("SELECT * FROM users WHERE role = :role ORDER BY name ASC")
+    fun getUsersByRole(role: String): Flow<List<UserEntity>>
+
+    @Query("SELECT * FROM users WHERE id = :id")
+    suspend fun getUserById(id: Long): UserEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertUser(user: UserEntity): Long
+
+    @Update
+    suspend fun updateUser(user: UserEntity)
+
+    @Query("DELETE FROM users WHERE id = :id")
+    suspend fun deleteUserById(id: Long)
+
+
+    // --- MENU ---
+    @Query("SELECT * FROM menu_items ORDER BY category ASC, name ASC")
+    fun getAllMenuItems(): Flow<List<MenuItemEntity>>
+
+    @Query("SELECT * FROM menu_items WHERE isAvailable = 1 ORDER BY category ASC, name ASC")
+    fun getAvailableMenuItems(): Flow<List<MenuItemEntity>>
+
+    @Query("SELECT * FROM menu_items WHERE isVisibleWeb = 1 AND isAvailable = 1 ORDER BY category ASC, name ASC")
+    fun getWebVisibleMenuItems(): Flow<List<MenuItemEntity>>
+
+    @Query("SELECT * FROM menu_items WHERE id = :id LIMIT 1")
+    suspend fun getMenuItemById(id: Long): MenuItemEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertMenuItem(item: MenuItemEntity): Long
+
+    @Update
+    suspend fun updateMenuItem(item: MenuItemEntity)
+
+    @Query("DELETE FROM menu_items WHERE id = :id")
+    suspend fun deleteMenuItemById(id: Long)
+
+
+    // --- INVENTORY & INGREDIENTS ---
+    @Query("SELECT * FROM inventory_items ORDER BY productName ASC")
+    fun getAllInventory(): Flow<List<InventoryItemEntity>>
+
+    @Query("SELECT * FROM inventory_items WHERE id = :id")
+    suspend fun getInventoryItemById(id: Long): InventoryItemEntity?
+
+    @Query("SELECT * FROM inventory_items WHERE currentStock <= minStock ORDER BY productName ASC")
+    fun getLowStockInventory(): Flow<List<InventoryItemEntity>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertInventory(item: InventoryItemEntity): Long
+
+    @Update
+    suspend fun updateInventory(item: InventoryItemEntity)
+
+    @Query("DELETE FROM inventory_items WHERE id = :id")
+    suspend fun deleteInventoryById(id: Long)
+
+    // --- RECIPES (BILL OF MATERIALS) ---
+    @Query("SELECT * FROM recipe_items WHERE menuItemId = :menuItemId ORDER BY ingredientName ASC")
+    fun getRecipeForMenuItemFlow(menuItemId: Long): Flow<List<RecipeItemEntity>>
+
+    @Query("SELECT * FROM recipe_items WHERE menuItemId = :menuItemId ORDER BY ingredientName ASC")
+    suspend fun getRecipeForMenuItem(menuItemId: Long): List<RecipeItemEntity>
+
+    @Query("SELECT * FROM recipe_items ORDER BY menuItemId ASC, ingredientName ASC")
+    fun getAllRecipeItems(): Flow<List<RecipeItemEntity>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertRecipeItem(item: RecipeItemEntity): Long
+
+    @Query("DELETE FROM recipe_items WHERE id = :id")
+    suspend fun deleteRecipeItemById(id: Long)
+
+    @Query("DELETE FROM recipe_items WHERE menuItemId = :menuItemId")
+    suspend fun deleteRecipeForMenuItem(menuItemId: Long)
+
+    // --- INVENTORY MOVEMENTS ---
+    @Query("SELECT * FROM inventory_movements ORDER BY timestamp DESC")
+    fun getAllInventoryMovements(): Flow<List<InventoryMovementEntity>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertInventoryMovement(movement: InventoryMovementEntity): Long
+
+
+    // --- ORDERS ---
+    @Query("SELECT * FROM orders ORDER BY id DESC")
+    fun getAllOrders(): Flow<List<OrderEntity>>
+
+    @Query("SELECT * FROM orders WHERE status IN ('PENDIENTE', 'EN_PROCESO') ORDER BY id ASC")
+    fun getKitchenOrders(): Flow<List<OrderEntity>>
+
+    @Query("SELECT * FROM orders WHERE status = 'FINALIZADO' ORDER BY id ASC")
+    fun getCashierOrders(): Flow<List<OrderEntity>>
+
+    @Query("SELECT * FROM orders WHERE waiterName = :waiterName AND status IN ('PENDIENTE', 'EN_PROCESO', 'FINALIZADO') ORDER BY id DESC")
+    fun getWaiterActiveOrders(waiterName: String): Flow<List<OrderEntity>>
+
+    @Query("SELECT * FROM orders WHERE waiterName = :waiterName AND status = 'PAGADO' ORDER BY paidAt DESC")
+    fun getWaiterHistory(waiterName: String): Flow<List<OrderEntity>>
+
+    @Query("SELECT * FROM orders WHERE id = :orderId")
+    suspend fun getOrderById(orderId: Long): OrderEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertOrder(order: OrderEntity): Long
+
+    @Update
+    suspend fun updateOrder(order: OrderEntity)
+
+    @Delete
+    suspend fun deleteOrder(order: OrderEntity)
+
+
+    // --- ORDER ITEMS ---
+    @Query("SELECT * FROM order_items WHERE orderId = :orderId")
+    fun getOrderItemsFlow(orderId: Long): Flow<List<OrderItemEntity>>
+
+    @Query("SELECT * FROM order_items WHERE orderId = :orderId")
+    suspend fun getOrderItems(orderId: Long): List<OrderItemEntity>
+
+    @Query("SELECT * FROM order_items")
+    fun getAllOrderItems(): Flow<List<OrderItemEntity>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertOrderItems(items: List<OrderItemEntity>)
+
+    @Query("DELETE FROM order_items WHERE orderId = :orderId")
+    suspend fun deleteOrderItemsByOrderId(orderId: Long)
+
+
+    // --- SALES & HISTORY ---
+    @Query("SELECT * FROM sales ORDER BY timestamp DESC")
+    fun getAllSales(): Flow<List<SaleEntity>>
+
+    @Query("SELECT * FROM sales WHERE timestamp >= :startTimestamp AND timestamp <= :endTimestamp ORDER BY timestamp DESC")
+    fun getSalesByTimeRange(startTimestamp: Long, endTimestamp: Long): Flow<List<SaleEntity>>
+
+    @Query("""
+        SELECT 
+            COALESCE(mi.category, 'Platillos') AS category, 
+            COALESCE(SUM(oi.subtotal), 0.0) AS totalAmount,
+            COALESCE(SUM(oi.quantity), 0) AS itemCount
+        FROM order_items oi 
+        JOIN orders o ON oi.orderId = o.id 
+        LEFT JOIN menu_items mi ON oi.menuItemId = mi.id 
+        WHERE o.status = 'PAGADO' AND o.paidAt >= :startTimestamp AND o.paidAt <= :endTimestamp 
+        GROUP BY mi.category
+    """)
+    fun getCategorySalesByTimeRange(startTimestamp: Long, endTimestamp: Long): Flow<List<CategorySaleSummary>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertSale(sale: SaleEntity): Long
+
+
+    // --- MANAGER CONFIG ---
+    @Query("SELECT * FROM users WHERE email = :email LIMIT 1")
+    suspend fun getUserByEmail(email: String): UserEntity?
+
+    @Query("SELECT * FROM manager_config WHERE id = 1")
+    fun getManagerConfigFlow(): Flow<ManagerConfigEntity?>
+
+    @Query("SELECT * FROM manager_config WHERE id = 1")
+    suspend fun getManagerConfig(): ManagerConfigEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertManagerConfig(config: ManagerConfigEntity)
+
+
+    // --- SYSTEM SETTINGS ---
+    @Query("SELECT * FROM system_settings WHERE id = 1")
+    fun getSystemSettingsFlow(): Flow<SystemSettingsEntity?>
+
+    @Query("SELECT * FROM system_settings WHERE id = 1")
+    suspend fun getSystemSettings(): SystemSettingsEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertSystemSettings(settings: SystemSettingsEntity)
+
+
+    // --- DEVICE BINDINGS & PAIRING CODES ---
+    @Query("SELECT * FROM device_bindings ORDER BY createdAt DESC")
+    fun getAllDeviceBindings(): Flow<List<DeviceBindingEntity>>
+
+    @Query("SELECT * FROM device_bindings WHERE code = :code OR code LIKE '%' || :code || '%' LIMIT 1")
+    suspend fun getDeviceBindingByCode(code: String): DeviceBindingEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertDeviceBinding(binding: DeviceBindingEntity): Long
+
+    @Update
+    suspend fun updateDeviceBinding(binding: DeviceBindingEntity)
+
+    @Query("DELETE FROM device_bindings WHERE id = :id")
+    suspend fun deleteDeviceBindingById(id: Long)
+
+
+    // --- LINKED DEVICES ---
+    @Query("SELECT * FROM linked_devices ORDER BY lastSeen DESC")
+    fun getAllLinkedDevices(): Flow<List<LinkedDeviceEntity>>
+
+    @Query("SELECT * FROM linked_devices WHERE deviceId = :deviceId LIMIT 1")
+    suspend fun getLinkedDeviceById(deviceId: String): LinkedDeviceEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertLinkedDevice(device: LinkedDeviceEntity)
+
+    @Query("DELETE FROM linked_devices WHERE deviceId = :deviceId")
+    suspend fun deleteLinkedDeviceById(deviceId: String)
+
+
+    // --- AUDIT LOGS ---
+    @Query("SELECT * FROM audit_logs ORDER BY timestamp DESC LIMIT 500")
+    fun getAllAuditLogs(): Flow<List<AuditLogEntity>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAuditLog(log: AuditLogEntity): Long
+
+
+    // --- OFFLINE SYNC QUEUE ---
+    @Query("SELECT * FROM sync_queue ORDER BY timestamp ASC")
+    suspend fun getAllSyncQueue(): List<SyncQueueEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertSyncQueue(item: SyncQueueEntity): Long
+
+    @Query("DELETE FROM sync_queue WHERE id = :id")
+    suspend fun deleteSyncQueueItem(id: Long)
+
+
+    // --- DAILY CLOSES ---
+    @Query("SELECT * FROM daily_closes ORDER BY timestamp DESC")
+    fun getAllDailyCloses(): Flow<List<DailyCloseEntity>>
+
+    @Query("SELECT * FROM daily_closes WHERE closeDate = :closeDate LIMIT 1")
+    suspend fun getDailyCloseByDate(closeDate: String): DailyCloseEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertDailyClose(close: DailyCloseEntity): Long
+
+
+    // --- JORNADA & RESET OPERATIONAL QUERIES ---
+    @Query("DELETE FROM orders WHERE status IN ('FINALIZADO', 'PAGADO', 'CANCELADO')")
+    suspend fun clearCompletedOrdersForNewJornada()
+
+    @Query("DELETE FROM orders")
+    suspend fun deleteAllOrders()
+
+    @Query("DELETE FROM order_items")
+    suspend fun deleteAllOrderItems()
+
+
+    // --- TOTAL SYSTEM RESET QUERIES ---
+    @Query("DELETE FROM sales")
+    suspend fun deleteAllSales()
+
+    @Query("DELETE FROM inventory_items")
+    suspend fun deleteAllInventory()
+
+    @Query("DELETE FROM menu_items")
+    suspend fun deleteAllMenuItems()
+
+    @Query("DELETE FROM recipe_items")
+    suspend fun deleteAllRecipeItems()
+
+    @Query("DELETE FROM inventory_movements")
+    suspend fun deleteAllInventoryMovements()
+
+    @Query("DELETE FROM daily_closes")
+    suspend fun deleteAllDailyCloses()
+
+    @Query("DELETE FROM device_bindings")
+    suspend fun deleteAllDeviceBindings()
+
+    @Query("DELETE FROM linked_devices")
+    suspend fun deleteAllLinkedDevices()
+
+    @Query("DELETE FROM audit_logs")
+    suspend fun deleteAllAuditLogs()
+
+    @Query("DELETE FROM sync_queue")
+    suspend fun deleteAllSyncQueue()
+
+    @Query("DELETE FROM users WHERE role != 'GERENTE'")
+    suspend fun deleteAllUsersExceptGerente()
+
+    // --- RESTAURANT TABLES ---
+    @Query("SELECT * FROM restaurant_tables ORDER BY displayOrder ASC, id ASC")
+    fun getAllTables(): Flow<List<TableEntity>>
+
+    @Query("SELECT * FROM restaurant_tables WHERE isActive = 1 ORDER BY displayOrder ASC, id ASC")
+    fun getActiveTables(): Flow<List<TableEntity>>
+
+    @Query("SELECT * FROM restaurant_tables WHERE id = :id LIMIT 1")
+    suspend fun getTableById(id: Long): TableEntity?
+
+    @Query("SELECT * FROM restaurant_tables WHERE tableNumber = :tableNumber LIMIT 1")
+    suspend fun getTableByNumber(tableNumber: String): TableEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertTable(table: TableEntity): Long
+
+    @Update
+    suspend fun updateTable(table: TableEntity)
+
+    @Query("DELETE FROM restaurant_tables WHERE id = :id")
+    suspend fun deleteTableById(id: Long)
+
+    @Query("UPDATE restaurant_tables SET status = 'Disponible', occupiedSince = NULL")
+    suspend fun resetAllTableStatuses()
+
+    @Query("DELETE FROM restaurant_tables")
+    suspend fun deleteAllTables()
+
+
+    // --- INVOICES (FACTURACIÓN) ---
+    @Query("SELECT * FROM invoices ORDER BY timestamp DESC")
+    fun getAllInvoices(): Flow<List<InvoiceEntity>>
+
+    @Query("SELECT * FROM invoices WHERE id = :id LIMIT 1")
+    suspend fun getInvoiceById(id: Long): InvoiceEntity?
+
+    @Query("SELECT * FROM invoices WHERE orderId = :orderId LIMIT 1")
+    suspend fun getInvoiceByOrderId(orderId: Long): InvoiceEntity?
+
+    @Query("SELECT * FROM invoices WHERE timestamp >= :startTimestamp AND timestamp <= :endTimestamp ORDER BY timestamp DESC")
+    fun getInvoicesByTimeRange(startTimestamp: Long, endTimestamp: Long): Flow<List<InvoiceEntity>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertInvoice(invoice: InvoiceEntity): Long
+
+    @Query("DELETE FROM invoices")
+    suspend fun deleteAllInvoices()
+
+
+    // --- THEMES & BRANDING (TEMAS) ---
+    @Query("SELECT * FROM themes ORDER BY updatedAt DESC")
+    fun getAllThemes(): Flow<List<ThemeConfigEntity>>
+
+    @Query("SELECT * FROM themes WHERE isActive = 1 LIMIT 1")
+    fun getActiveTheme(): Flow<ThemeConfigEntity?>
+
+    @Query("SELECT * FROM themes WHERE isActive = 1 LIMIT 1")
+    suspend fun getActiveThemeDirect(): ThemeConfigEntity?
+
+    @Query("SELECT * FROM themes WHERE id = :id LIMIT 1")
+    suspend fun getThemeById(id: Long): ThemeConfigEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertTheme(theme: ThemeConfigEntity): Long
+
+    @Update
+    suspend fun updateTheme(theme: ThemeConfigEntity)
+
+    @Query("UPDATE themes SET isActive = 0 WHERE id != :activeThemeId")
+    suspend fun deactivateOtherThemes(activeThemeId: Long)
+
+    @Query("DELETE FROM themes WHERE id = :id")
+    suspend fun deleteThemeById(id: Long)
+
+
+    // --- WEB ORDERS (PEDIDOS_WEB) ---
+    @Query("SELECT * FROM web_orders ORDER BY createdAt DESC")
+    fun getAllWebOrders(): Flow<List<WebOrderEntity>>
+
+    @Query("SELECT * FROM web_orders WHERE status = 'Pendiente Validación' ORDER BY createdAt ASC")
+    fun getPendingValidationWebOrders(): Flow<List<WebOrderEntity>>
+
+    @Query("SELECT * FROM web_orders WHERE status IN ('Pendiente Validación', 'En Cocina', 'Listo') ORDER BY createdAt DESC")
+    fun getActiveWebOrders(): Flow<List<WebOrderEntity>>
+
+    @Query("SELECT * FROM web_orders WHERE id = :id LIMIT 1")
+    suspend fun getWebOrderById(id: Long): WebOrderEntity?
+
+    @Query("SELECT * FROM web_orders WHERE webOrderId = :webOrderId LIMIT 1")
+    suspend fun getWebOrderByCode(webOrderId: String): WebOrderEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertWebOrder(webOrder: WebOrderEntity): Long
+
+    @Update
+    suspend fun updateWebOrder(webOrder: WebOrderEntity)
+
+    @Query("UPDATE web_orders SET status = :status WHERE id = :id")
+    suspend fun updateWebOrderStatus(id: Long, status: String)
+
+    @Query("UPDATE web_orders SET status = :status, posOrderId = :posOrderId, validatedAt = :validatedAt WHERE id = :id")
+    suspend fun validateAndLinkWebOrder(id: Long, status: String, posOrderId: Long, validatedAt: Long)
+
+    @Query("DELETE FROM web_orders WHERE id = :id")
+    suspend fun deleteWebOrderById(id: Long)
+}
