@@ -141,6 +141,26 @@ class RestaurantRepository(
 
         val items = dao.getOrderItems(orderId)
         firestoreSyncManager?.syncOrderToRemote(updatedOrder, items)
+
+        // If kitchen finalizes an order, check if it's linked to a web/delivery order and mark it "Listo para Entrega"
+        if (newStatus == "FINALIZADO") {
+            val linkedWebOrder = dao.getWebOrderByPosOrderId(orderId)
+            if (linkedWebOrder != null) {
+                val targetDeliveryStatus = if (linkedWebOrder.origin.contains("Delivery", ignoreCase = true) || 
+                    linkedWebOrder.origin.contains("WhatsApp", ignoreCase = true) ||
+                    linkedWebOrder.deliveryAddress.isNotBlank()) {
+                    "Listo para Entrega"
+                } else {
+                    "Listo"
+                }
+                dao.updateWebOrderStatus(linkedWebOrder.id, targetDeliveryStatus)
+                firestoreSyncManager?.updateRemoteWebOrderStatus(
+                    webOrderId = linkedWebOrder.webOrderId.ifBlank { "WEB-${linkedWebOrder.id}" },
+                    newStatus = targetDeliveryStatus,
+                    posOrderId = orderId
+                )
+            }
+        }
     }
 
     suspend fun processPayment(
@@ -535,8 +555,23 @@ class RestaurantRepository(
             }
         }
 
+        val cashSales = paidOrdersToday.filter { it.paymentMethod?.equals("Efectivo", ignoreCase = true) == true || it.paymentMethod.isNullOrBlank() }.sumOf { it.totalAmount }
+        val cardSales = paidOrdersToday.filter { it.paymentMethod?.equals("Tarjeta", ignoreCase = true) == true }.sumOf { it.totalAmount }
+        val transferSales = paidOrdersToday.filter { it.paymentMethod?.equals("Transferencia", ignoreCase = true) == true }.sumOf { it.totalAmount }
+
         val folioCount = (1..99).random()
         val folio = "CLO-$dateCompact-${String.format("%06d", folioCount)}"
+
+        val summaryJson = """
+            {
+                "ventasEfectivo": $cashSales,
+                "ventasTarjeta": $cardSales,
+                "ventasTransferencia": $transferSales,
+                "granTotal": $totalAmount,
+                "paidOrders": $totalOrdersCount,
+                "totalSales": $totalAmount
+            }
+        """.trimIndent()
 
         val closeRecord = DailyCloseEntity(
             folio = folio,
@@ -547,7 +582,7 @@ class RestaurantRepository(
             role = "GERENTE",
             deviceId = deviceId,
             branchName = branchName,
-            summaryJson = "{'paidOrders': $totalOrdersCount, 'totalSales': $totalAmount}",
+            summaryJson = summaryJson,
             timestamp = System.currentTimeMillis()
         )
 
@@ -963,6 +998,209 @@ class RestaurantRepository(
         calendar.set(java.util.Calendar.SECOND, 0)
         calendar.set(java.util.Calendar.MILLISECOND, 0)
         return calendar.timeInMillis
+    }
+
+    // --- REPARTIDOR (DELIVERY) FLOWS & ACTIONS ---
+    val allDeliveryOrders: Flow<List<WebOrderEntity>> = dao.getAllDeliveryOrders()
+    val readyDeliveryOrders: Flow<List<WebOrderEntity>> = dao.getReadyDeliveryOrders()
+    val inTransitDeliveryOrders: Flow<List<WebOrderEntity>> = dao.getInTransitDeliveryOrders()
+    val completedDeliveryOrders: Flow<List<WebOrderEntity>> = dao.getCompletedDeliveryOrders()
+    val incidentDeliveryOrders: Flow<List<WebOrderEntity>> = dao.getIncidentDeliveryOrders()
+
+    val allDeliverySettlements: Flow<List<DeliverySettlementEntity>> = dao.getAllDeliverySettlements()
+    val todayDeliverySettlements: Flow<List<DeliverySettlementEntity>> = dao.getTodayDeliverySettlements(getStartOfDayTimestamp())
+
+    suspend fun startDelivery(webOrderId: Long, driverName: String) {
+        val webOrder = dao.getWebOrderById(webOrderId) ?: return
+        val now = System.currentTimeMillis()
+        val updatedOrder = webOrder.copy(
+            status = "En Camino",
+            deliveryDriverName = driverName,
+            deliveryStartedAt = now
+        )
+        dao.updateWebOrder(updatedOrder)
+
+        if (webOrder.posOrderId != null) {
+            val posOrder = dao.getOrderById(webOrder.posOrderId)
+            if (posOrder != null) {
+                val updatedPos = posOrder.copy(
+                    status = "EN_CAMINO",
+                    deliveryDriverName = driverName,
+                    deliveryStartedAt = now
+                )
+                dao.updateOrder(updatedPos)
+            }
+        }
+
+        firestoreSyncManager?.syncDeliveryStatusToRemote(
+            webOrderId = webOrder.webOrderId.ifBlank { "WEB-$webOrderId" },
+            posOrderId = webOrder.posOrderId,
+            status = "En Camino",
+            driverName = driverName,
+            startedAt = now
+        )
+
+        logAudit(
+            user = driverName,
+            role = "REPARTIDOR",
+            deviceId = "REPARTIDOR-APP",
+            action = "ENTREGA_EN_CAMINO",
+            details = "Pedido ${webOrder.webOrderId} en camino para ${webOrder.customerName} a ${webOrder.deliveryAddress.ifBlank { "Dirección de cliente" }}"
+        )
+    }
+
+    suspend fun completeDelivery(webOrderId: Long, driverName: String, cashierName: String = "Caja Principal") {
+        val webOrder = dao.getWebOrderById(webOrderId) ?: return
+        val now = System.currentTimeMillis()
+
+        // 1. Mark Web Order as Entregado
+        val updatedOrder = webOrder.copy(
+            status = "Entregado",
+            deliveryDriverName = driverName,
+            deliveryFinishedAt = now
+        )
+        dao.updateWebOrder(updatedOrder)
+
+        // 2. If posOrderId exists, process payment and inventory deduction in POS
+        val posOrderId = webOrder.posOrderId
+        if (posOrderId != null) {
+            val posOrder = dao.getOrderById(posOrderId)
+            if (posOrder != null && posOrder.status != "PAGADO") {
+                val updatedPos = posOrder.copy(
+                    status = "PAGADO",
+                    paidAt = now,
+                    paymentMethod = webOrder.paymentMethod,
+                    cashierName = "Delivery ($driverName)",
+                    deliveryDriverName = driverName,
+                    deliveryFinishedAt = now
+                )
+                dao.updateOrder(updatedPos)
+
+                // Insert into sales for Caja reporting
+                dao.insertSale(
+                    SaleEntity(
+                        orderId = posOrderId,
+                        orderNumber = posOrder.orderNumber,
+                        cashierName = "Delivery ($driverName)",
+                        total = posOrder.totalAmount,
+                        paymentMethod = webOrder.paymentMethod,
+                        timestamp = now
+                    )
+                )
+
+                // Automatic inventory recipe deduction
+                val items = dao.getOrderItems(posOrderId)
+                for (item in items) {
+                    val recipe = dao.getRecipeForMenuItem(item.menuItemId)
+                    for (recItem in recipe) {
+                        val ingredient = dao.getInventoryItemById(recItem.ingredientId)
+                        if (ingredient != null) {
+                            val consumedQty = recItem.quantityRequired * item.quantity
+                            val newStock = (ingredient.currentStock - consumedQty).coerceAtLeast(0.0)
+                            val updatedIng = ingredient.copy(currentStock = newStock)
+                            dao.updateInventory(updatedIng)
+                            firestoreSyncManager?.syncInventoryToRemote(updatedIng)
+
+                            dao.insertInventoryMovement(
+                                InventoryMovementEntity(
+                                    ingredientId = ingredient.id,
+                                    ingredientName = ingredient.productName,
+                                    type = "VENTA_AUTOMATICA",
+                                    quantity = -consumedQty,
+                                    reason = "Entrega Domicilio #${posOrder.orderNumber} (${item.productName} x${item.quantity})",
+                                    user = driverName,
+                                    timestamp = now
+                                )
+                            )
+                        }
+                    }
+                }
+            }
+        } else {
+            // Standalone web order sale record
+            dao.insertSale(
+                SaleEntity(
+                    orderId = webOrderId,
+                    orderNumber = webOrder.webOrderId,
+                    cashierName = "Delivery ($driverName)",
+                    total = webOrder.totalAmount,
+                    paymentMethod = webOrder.paymentMethod,
+                    timestamp = now
+                )
+            )
+        }
+
+        // 3. Record Delivery Settlement in Room
+        val settlement = DeliverySettlementEntity(
+            webOrderId = webOrder.webOrderId.ifBlank { "WEB-$webOrderId" },
+            posOrderId = posOrderId,
+            customerName = webOrder.customerName,
+            customerPhone = webOrder.customerPhone,
+            deliveryAddress = webOrder.deliveryAddress,
+            driverName = driverName,
+            totalAmount = webOrder.totalAmount,
+            paymentMethod = webOrder.paymentMethod,
+            completedAt = now,
+            settlementStatus = "LIQUIDADO"
+        )
+        val settlementId = dao.insertDeliverySettlement(settlement)
+
+        // 4. Sync Settlement and Order Closure to Remote Firestore
+        firestoreSyncManager?.syncDeliveryStatusToRemote(
+            webOrderId = webOrder.webOrderId.ifBlank { "WEB-$webOrderId" },
+            posOrderId = posOrderId,
+            status = "Entregado",
+            driverName = driverName,
+            finishedAt = now
+        )
+        firestoreSyncManager?.recordDeliverySettlementToFirestore(settlement.copy(id = settlementId))
+
+        logAudit(
+            user = driverName,
+            role = "REPARTIDOR",
+            deviceId = "REPARTIDOR-APP",
+            action = "ENTREGA_LIQUIDADA",
+            details = "Entrega completada y cobro liquidado en Caja por Q${String.format(java.util.Locale.US, "%.2f", webOrder.totalAmount)} (${webOrder.customerName})"
+        )
+    }
+
+    suspend fun reportDeliveryIncident(webOrderId: Long, driverName: String, incidentNote: String) {
+        val webOrder = dao.getWebOrderById(webOrderId) ?: return
+        val now = System.currentTimeMillis()
+
+        val updatedOrder = webOrder.copy(
+            status = "INCIDENCIA",
+            deliveryDriverName = driverName,
+            deliveryIssueNote = incidentNote
+        )
+        dao.updateWebOrder(updatedOrder)
+
+        if (webOrder.posOrderId != null) {
+            val posOrder = dao.getOrderById(webOrder.posOrderId)
+            if (posOrder != null) {
+                val updatedPos = posOrder.copy(
+                    status = "INCIDENCIA",
+                    deliveryDriverName = driverName,
+                    deliveryIssueNote = incidentNote
+                )
+                dao.updateOrder(updatedPos)
+            }
+        }
+
+        firestoreSyncManager?.recordDeliveryIncidentToFirestore(
+            webOrderId = webOrder.webOrderId.ifBlank { "WEB-$webOrderId" },
+            posOrderId = webOrder.posOrderId,
+            incidentNote = incidentNote,
+            driverName = driverName
+        )
+
+        logAudit(
+            user = driverName,
+            role = "REPARTIDOR",
+            deviceId = "REPARTIDOR-APP",
+            action = "INCIDENCIA_DELIVERY",
+            details = "Problema reportado en pedido ${webOrder.webOrderId}: $incidentNote"
+        )
     }
 }
 

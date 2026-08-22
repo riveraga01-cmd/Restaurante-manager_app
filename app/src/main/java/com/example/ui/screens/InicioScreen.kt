@@ -45,6 +45,8 @@ fun InicioScreen(
     val kitchenOrders by viewModel.kitchenOrders.collectAsState()
     val cashierOrders by viewModel.cashierOrders.collectAsState()
     val lowStock by viewModel.lowStockInventory.collectAsState()
+    val readyDeliveryOrders by viewModel.readyDeliveryOrders.collectAsState()
+    val inTransitDeliveryOrders by viewModel.inTransitDeliveryOrders.collectAsState()
     val currentUser by viewModel.currentUser.collectAsState()
     val syncStatusLabel by viewModel.syncStatusLabel.collectAsState()
     val isDarkTheme by viewModel.isDarkTheme.collectAsState()
@@ -74,50 +76,51 @@ fun InicioScreen(
                 .fillMaxSize()
                 .statusBarsPadding()
         ) {
-            // Header Top Bar - Modern Gastronomy Brand
+            // Header Top Bar - Minimized & Compact Brand
             Surface(
                 modifier = Modifier.fillMaxWidth(),
                 color = MaterialTheme.colorScheme.surface,
-                shadowElevation = 3.dp,
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
+                shadowElevation = 2.dp,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f))
             ) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 20.dp, vertical = 14.dp),
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    // Minimized App Name & Brand Indicator
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Surface(
-                            shape = RoundedCornerShape(14.dp),
-                            color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(46.dp)
+                            shape = RoundedCornerShape(8.dp),
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                            modifier = Modifier.size(30.dp)
                         ) {
                             Box(contentAlignment = Alignment.Center) {
                                 Icon(
                                     imageVector = Icons.Default.RestaurantMenu,
                                     contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onPrimary,
-                                    modifier = Modifier.size(24.dp)
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(16.dp)
                                 )
                             }
                         }
 
-                        Column {
+                        Column(verticalArrangement = Arrangement.Center) {
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
                                 Text(
-                                    text = "RESTAURANTE RIVERA",
-                                    style = MaterialTheme.typography.labelSmall.copy(
-                                        fontWeight = FontWeight.Black,
-                                        letterSpacing = 1.8.sp,
-                                        color = MaterialTheme.colorScheme.secondary
+                                    text = "Restaurante Rivera",
+                                    style = MaterialTheme.typography.titleSmall.copy(
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 13.sp,
+                                        color = MaterialTheme.colorScheme.onSurface
                                     )
                                 )
                                 com.example.ui.components.SyncStatusChip(
@@ -126,10 +129,11 @@ fun InicioScreen(
                                 )
                             }
                             Text(
-                                text = "POS & Kitchen Hub",
-                                style = MaterialTheme.typography.titleLarge.copy(
-                                    fontWeight = FontWeight.ExtraBold,
-                                    color = MaterialTheme.colorScheme.onSurface
+                                text = "POS & Hub",
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Normal,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             )
                         }
@@ -147,13 +151,14 @@ fun InicioScreen(
                             },
                             colors = IconButtonDefaults.filledTonalIconButtonColors(
                                 containerColor = MaterialTheme.colorScheme.surfaceVariant
-                            )
+                            ),
+                            modifier = Modifier.size(36.dp)
                         ) {
                             Icon(
                                 imageVector = if (isDarkTheme) Icons.Default.LightMode else Icons.Default.DarkMode,
                                 contentDescription = "Cambiar Tema",
                                 tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(20.dp)
+                                modifier = Modifier.size(18.dp)
                             )
                         }
 
@@ -165,22 +170,24 @@ fun InicioScreen(
                             colors = IconButtonDefaults.filledTonalIconButtonColors(
                                 containerColor = MaterialTheme.colorScheme.surfaceVariant
                             ),
-                            modifier = Modifier.testTag("btn_vincular_dispositivo_header")
+                            modifier = Modifier
+                                .size(36.dp)
+                                .testTag("btn_vincular_dispositivo_header")
                         ) {
                             Icon(
                                 imageVector = Icons.Default.QrCodeScanner,
                                 contentDescription = "Vincular Dispositivo",
                                 tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(20.dp)
+                                modifier = Modifier.size(18.dp)
                             )
                         }
 
                         Surface(
-                            shape = RoundedCornerShape(20.dp),
+                            shape = RoundedCornerShape(18.dp),
                             color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
                             border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)),
                             modifier = Modifier
-                                .clip(RoundedCornerShape(20.dp))
+                                .clip(RoundedCornerShape(18.dp))
                                 .clickable {
                                     HapticHelper.triggerLightClick(context)
                                     showAuthDialog = true
@@ -188,27 +195,27 @@ fun InicioScreen(
                                 .testTag("btn_usuario_perfil_header")
                         ) {
                             Row(
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
                                 verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
                                 if (currentUser != null) {
                                     Column(horizontalAlignment = Alignment.End) {
                                         Text(
                                             text = currentUser!!.name,
-                                            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, fontSize = 11.sp),
                                             color = MaterialTheme.colorScheme.onSurface
                                         )
                                         Text(
                                             text = currentUser!!.role,
-                                            style = MaterialTheme.typography.labelSmall,
+                                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
                                     }
                                 } else {
                                     Text(
                                         text = "Iniciar Sesión",
-                                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, fontSize = 11.sp),
                                         color = MaterialTheme.colorScheme.primary
                                     )
                                 }
@@ -216,14 +223,15 @@ fun InicioScreen(
                                 Surface(
                                     shape = CircleShape,
                                     color = MaterialTheme.colorScheme.primaryContainer,
-                                    border = BorderStroke(2.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)),
-                                    modifier = Modifier.size(36.dp)
+                                    border = BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)),
+                                    modifier = Modifier.size(30.dp)
                                 ) {
                                     Box(contentAlignment = Alignment.Center) {
                                         Text(
                                             text = userInitials,
-                                            style = MaterialTheme.typography.titleSmall.copy(
+                                            style = MaterialTheme.typography.labelMedium.copy(
                                                 fontWeight = FontWeight.ExtraBold,
+                                                fontSize = 11.sp,
                                                 color = MaterialTheme.colorScheme.onPrimaryContainer
                                             )
                                         )
@@ -240,21 +248,21 @@ fun InicioScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f)
-                    .padding(horizontal = 20.dp, vertical = 16.dp),
+                    .padding(horizontal = 20.dp, vertical = 12.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 // Live Operational Stats Banner
                 Surface(
-                    shape = RoundedCornerShape(20.dp),
+                    shape = RoundedCornerShape(18.dp),
                     color = MaterialTheme.colorScheme.surface,
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)),
                     shadowElevation = 1.dp,
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                            .padding(horizontal = 14.dp, vertical = 10.dp),
                         horizontalArrangement = Arrangement.SpaceAround,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -267,7 +275,7 @@ fun InicioScreen(
                         )
                         HorizontalDivider(
                             modifier = Modifier
-                                .height(28.dp)
+                                .height(26.dp)
                                 .width(1.dp),
                             color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
                         )
@@ -281,8 +289,8 @@ fun InicioScreen(
                         if (lowStockCount > 0) {
                             HorizontalDivider(
                                 modifier = Modifier
-                                    .height(28.dp)
-                                    .width(1.dp),
+                                .height(26.dp)
+                                .width(1.dp),
                                 color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
                             )
                             StatusSummaryChip(
@@ -296,7 +304,7 @@ fun InicioScreen(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(18.dp))
+                Spacer(modifier = Modifier.height(14.dp))
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -418,6 +426,31 @@ fun InicioScreen(
                             onClick = {
                                 HapticHelper.triggerLightClick(context)
                                 viewModel.requestAccessToRole(MainRole.GERENTE)
+                            }
+                        )
+                    }
+
+                    item {
+                        val cardBg = MaterialTheme.colorScheme.surface
+                        val cardContainer = MaterialTheme.colorScheme.primaryContainer
+                        val cardPrimary = MaterialTheme.colorScheme.primary
+                        val readyCount = readyDeliveryOrders.size
+                        val inTransitCount = inTransitDeliveryOrders.size
+
+                        BentoRoleCard(
+                            title = "REPARTIDOR",
+                            subtitle = "Delivery y entregas a domicilio",
+                            badgeText = if (readyCount > 0) "$readyCount LISTOS" else if (inTransitCount > 0) "$inTransitCount EN RUTA" else null,
+                            icon = Icons.Default.Moped,
+                            accentColor = cardPrimary,
+                            containerGradient = listOf(
+                                cardBg,
+                                cardContainer.copy(alpha = 0.5f)
+                            ),
+                            testTag = "btn_repartidor",
+                            onClick = {
+                                HapticHelper.triggerSuccessVibration(context)
+                                viewModel.requestAccessToRole(MainRole.REPARTIDOR)
                             }
                         )
                     }

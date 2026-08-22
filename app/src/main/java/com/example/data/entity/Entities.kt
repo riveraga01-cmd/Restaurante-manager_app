@@ -111,7 +111,7 @@ data class SystemSettingsEntity(
     val postalCode: String = "01001",
     val phoneSecondary: String = "+502 2345-6790",
     val whatsapp: String = "+502 5555-1234",
-    val website: String = "www.restauranterivera.com",
+    val website: String = "https://riveraga01-cmd.github.io/Restaurante-manager_app/",
     val facebook: String = "@RestauranteRiveraGT",
     val instagram: String = "@restaurante_rivera_gt",
     val openingHours: String = "Lunes a Domingo: 07:00 - 22:00",
@@ -306,16 +306,21 @@ data class InventoryMovementEntity(
 data class OrderEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val orderNumber: String, // e.g. PED-101
-    val tableNumber: String, // e.g. Mesa 1, Mesa 2, Para Llevar
+    val tableNumber: String, // e.g. Mesa 1, Mesa 2, Para Llevar, Delivery
     val waiterName: String,
-    val status: String, // PENDIENTE, EN_PROCESO, FINALIZADO, PAGADO, CANCELADO
+    val status: String, // PENDIENTE, EN_PROCESO, FINALIZADO, PAGADO, CANCELADO, EN_CAMINO, ENTREGADO, INCIDENCIA
     val totalAmount: Double,
     val createdAt: Long = System.currentTimeMillis(),
     val completedAt: Long? = null,
     val paidAt: Long? = null,
     val paymentMethod: String? = null, // Efectivo, Tarjeta, Transferencia
     val cashierName: String? = null,
-    val generalNotes: String? = null
+    val generalNotes: String? = null,
+    val deliveryAddress: String? = null,
+    val deliveryDriverName: String? = null,
+    val deliveryStartedAt: Long? = null,
+    val deliveryFinishedAt: Long? = null,
+    val deliveryIssueNote: String? = null
 )
 
 @Entity(
@@ -380,18 +385,38 @@ data class ThemeConfigEntity(
 data class WebOrderEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val webOrderId: String = "", // e.g. QR_MESA_1-2026, WA-502-8812
-    val origin: String = "QR_Mesa_1", // QR_Mesa_X, WhatsApp, Web_Menu
+    val origin: String = "QR_Mesa_1", // QR_Mesa_X, WhatsApp, Web_Menu, Delivery/WhatsApp
     val tableNumber: String = "Mesa 1",
     val customerName: String = "Cliente Web",
     val customerPhone: String = "",
     val itemsJson: String = "[]", // Serialized list of items
     val totalAmount: Double = 0.0, // En Quetzales (Q)
-    val status: String = "Pendiente Validación", // Pendiente Validación, En Cocina, Listo, Entregado, Cancelado
+    val status: String = "Pendiente Validación", // Pendiente Validación, En Cocina, Listo para Entrega, En Camino, Entregado, INCIDENCIA, Cancelado
     val paymentMethod: String = "Efectivo al recibir",
     val notes: String = "",
     val createdAt: Long = System.currentTimeMillis(),
     val validatedAt: Long? = null,
-    val posOrderId: Long? = null
+    val posOrderId: Long? = null,
+    val deliveryAddress: String = "",
+    val deliveryDriverName: String = "",
+    val deliveryStartedAt: Long? = null,
+    val deliveryFinishedAt: Long? = null,
+    val deliveryIssueNote: String = ""
+)
+
+@Entity(tableName = "delivery_settlements")
+data class DeliverySettlementEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val webOrderId: String,
+    val posOrderId: Long? = null,
+    val customerName: String,
+    val customerPhone: String = "",
+    val deliveryAddress: String = "",
+    val driverName: String,
+    val totalAmount: Double,
+    val paymentMethod: String,
+    val completedAt: Long = System.currentTimeMillis(),
+    val settlementStatus: String = "LIQUIDADO"
 )
 
 data class WebOrderItem(

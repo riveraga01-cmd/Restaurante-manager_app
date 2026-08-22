@@ -41,6 +41,11 @@ fun WebMenuSimulatorDialog(
     var isLoading by remember { mutableStateOf(true) }
 
     val tableOptions = listOf("Mesa 1", "Mesa 2", "Mesa 3", "Mesa 4", "Mesa 5", "Barra", "Para Llevar")
+    val baseWebUrl = "https://riveraga01-cmd.github.io/Restaurante-manager_app/"
+
+    fun getWebUrl(table: String): String {
+        return "$baseWebUrl?mesa=${Uri.encode(table)}"
+    }
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -133,7 +138,7 @@ fun WebMenuSimulatorDialog(
                                             onClick = {
                                                 currentTable = t
                                                 expanded = false
-                                                webViewRef?.loadUrl("file:///android_asset/web/index.html?mesa=${Uri.encode(t)}")
+                                                webViewRef?.loadUrl(getWebUrl(t))
                                             }
                                         )
                                     }
@@ -154,12 +159,16 @@ fun WebMenuSimulatorDialog(
                             FilledTonalButton(
                                 onClick = {
                                     val intent = Intent(Intent.ACTION_VIEW).apply {
-                                        data = Uri.parse("file:///android_asset/web/index.html?mesa=${Uri.encode(currentTable)}")
+                                        data = Uri.parse(getWebUrl(currentTable))
                                     }
                                     try {
                                         context.startActivity(intent)
                                     } catch (e: Exception) {
-                                        // Fallback
+                                        // Fallback to local asset
+                                        val fallbackIntent = Intent(Intent.ACTION_VIEW).apply {
+                                            data = Uri.parse("file:///android_asset/web/index.html?mesa=${Uri.encode(currentTable)}")
+                                        }
+                                        try { context.startActivity(fallbackIntent) } catch (_: Exception) {}
                                     }
                                 },
                                 contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
@@ -196,6 +205,17 @@ fun WebMenuSimulatorDialog(
                                         super.onPageFinished(view, url)
                                         isLoading = false
                                     }
+                                    override fun onReceivedError(
+                                        view: WebView?,
+                                        errorCode: Int,
+                                        description: String?,
+                                        failingUrl: String?
+                                    ) {
+                                        // If network is offline, gracefully fall back to local asset index.html
+                                        if (failingUrl?.startsWith("http") == true) {
+                                            view?.loadUrl("file:///android_asset/web/index.html?mesa=${Uri.encode(currentTable)}")
+                                        }
+                                    }
                                     override fun shouldOverrideUrlLoading(
                                         view: WebView?,
                                         request: WebResourceRequest?
@@ -209,7 +229,7 @@ fun WebMenuSimulatorDialog(
                                         return false
                                     }
                                 }
-                                loadUrl("file:///android_asset/web/index.html?mesa=${Uri.encode(currentTable)}")
+                                loadUrl(getWebUrl(currentTable))
                                 webViewRef = this
                             }
                         },

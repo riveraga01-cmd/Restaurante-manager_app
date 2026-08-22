@@ -31,9 +31,10 @@ import kotlinx.coroutines.launch
         TableEntity::class,
         InvoiceEntity::class,
         ThemeConfigEntity::class,
-        WebOrderEntity::class
+        WebOrderEntity::class,
+        DeliverySettlementEntity::class
     ],
-    version = 8,
+    version = 9,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -81,6 +82,8 @@ abstract class AppDatabase : RoomDatabase() {
                 UserEntity(name = "Lucía Morales", role = "MESERO"),
                 UserEntity(name = "Ana Rivas", role = "CAJA"),
                 UserEntity(name = "Juan Pérez", role = "CAJA"),
+                UserEntity(name = "Héctor Soto", role = "REPARTIDOR"),
+                UserEntity(name = "Luis Morales", role = "REPARTIDOR"),
                 UserEntity(name = "Cocina Central", role = "COCINA"),
                 UserEntity(name = "Cocina Parrilla", role = "COCINA"),
                 UserEntity(name = "Gerente Principal", role = "GERENTE", pin = "1234")
@@ -97,6 +100,7 @@ abstract class AppDatabase : RoomDatabase() {
                     branchName = "Sucursal Central",
                     themePalette = "AZUL_RIVERA",
                     currencySymbol = "Q",
+                    website = "https://riveraga01-cmd.github.io/Restaurante-manager_app/",
                     managerPin = "1234"
                 )
             )

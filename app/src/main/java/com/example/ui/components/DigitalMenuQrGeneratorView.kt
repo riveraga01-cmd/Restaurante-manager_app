@@ -50,8 +50,15 @@ fun DigitalMenuQrGeneratorView(
     val allTables by viewModel.allTables.collectAsState()
 
     var selectedQrType by remember { mutableStateOf(0) } // 0: Menú Digital Web, 1: Pedidos WhatsApp, 2: QR por Mesa
+    val defaultWebMenuUrl = "https://riveraga01-cmd.github.io/Restaurante-manager_app/"
     var targetUrl by remember(systemSettings.website) { 
-        mutableStateOf(if (systemSettings.website.isNotBlank()) "https://${systemSettings.website.removePrefix("http://").removePrefix("https://")}/menu" else "https://restauranterivera.com/menu-digital") 
+        val site = systemSettings.website.trim()
+        val formatted = when {
+            site.isBlank() || site == "www.restauranterivera.com" || site == "https://restauranterivera.com/menu-digital" -> defaultWebMenuUrl
+            site.startsWith("http://") || site.startsWith("https://") -> site
+            else -> "https://$site"
+        }
+        mutableStateOf(formatted)
     }
     var whatsappNumber by remember(systemSettings.whatsapp) { mutableStateOf(systemSettings.whatsapp) }
     var whatsappWelcomeMsg by remember { 

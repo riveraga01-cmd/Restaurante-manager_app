@@ -372,6 +372,11 @@ class FirestoreSyncManager(
                                 val createdAt = doc.getLong("createdAt") ?: System.currentTimeMillis()
                                 val validatedAt = doc.getLong("validatedAt")
                                 val posOrderId = doc.getLong("posOrderId")
+                                val deliveryAddress = doc.getString("deliveryAddress") ?: ""
+                                val deliveryDriverName = doc.getString("deliveryDriverName") ?: ""
+                                val deliveryStartedAt = doc.getLong("deliveryStartedAt")
+                                val deliveryFinishedAt = doc.getLong("deliveryFinishedAt")
+                                val deliveryIssueNote = doc.getString("deliveryIssueNote") ?: ""
 
                                 val webOrder = WebOrderEntity(
                                     id = id,
@@ -387,7 +392,12 @@ class FirestoreSyncManager(
                                     notes = notes,
                                     createdAt = createdAt,
                                     validatedAt = validatedAt,
-                                    posOrderId = posOrderId
+                                    posOrderId = posOrderId,
+                                    deliveryAddress = deliveryAddress,
+                                    deliveryDriverName = deliveryDriverName,
+                                    deliveryStartedAt = deliveryStartedAt,
+                                    deliveryFinishedAt = deliveryFinishedAt,
+                                    deliveryIssueNote = deliveryIssueNote
                                 )
                                 dao.insertWebOrder(webOrder)
                             }
@@ -861,7 +871,12 @@ class FirestoreSyncManager(
                     "notes" to webOrder.notes,
                     "createdAt" to webOrder.createdAt,
                     "validatedAt" to webOrder.validatedAt,
-                    "posOrderId" to webOrder.posOrderId
+                    "posOrderId" to webOrder.posOrderId,
+                    "deliveryAddress" to webOrder.deliveryAddress,
+                    "deliveryDriverName" to webOrder.deliveryDriverName,
+                    "deliveryStartedAt" to webOrder.deliveryStartedAt,
+                    "deliveryFinishedAt" to webOrder.deliveryFinishedAt,
+                    "deliveryIssueNote" to webOrder.deliveryIssueNote
                 )
                 db.collection("pedidos_web")
                     .document(docId)
@@ -890,6 +905,135 @@ class FirestoreSyncManager(
                     .await()
             } catch (e: Exception) {
                 Log.e("FirestoreSync", "Failed to update web order status in Firestore: ${e.message}")
+            }
+        }
+    }
+
+    fun syncDeliveryStatusToRemote(
+        webOrderId: String,
+        posOrderId: Long?,
+        status: String,
+        driverName: String,
+        startedAt: Long? = null,
+        finishedAt: Long? = null
+    ) {
+        externalScope.launch {
+            val db = firestore ?: return@launch
+            try {
+                val updateMap = mutableMapOf<String, Any>(
+                    "status" to status,
+                    "deliveryDriverName" to driverName
+                )
+                if (startedAt != null) updateMap["deliveryStartedAt"] = startedAt
+                if (finishedAt != null) updateMap["deliveryFinishedAt"] = finishedAt
+
+                db.collection("pedidos_web")
+                    .document(webOrderId)
+                    .set(updateMap, SetOptions.merge())
+                    .await()
+
+                if (posOrderId != null) {
+                    val orderMap = mutableMapOf<String, Any>(
+                        "status" to status,
+                        "deliveryDriverName" to driverName
+                    )
+                    if (startedAt != null) orderMap["deliveryStartedAt"] = startedAt
+                    if (finishedAt != null) orderMap["deliveryFinishedAt"] = finishedAt
+                    db.collection("orders")
+                        .document(posOrderId.toString())
+                        .set(orderMap, SetOptions.merge())
+                        .await()
+                }
+            } catch (e: Exception) {
+                Log.e("FirestoreSync", "Failed to sync delivery status: ${e.message}")
+            }
+        }
+    }
+
+    fun recordDeliverySettlementToFirestore(settlement: DeliverySettlementEntity) {
+        externalScope.launch {
+            val db = firestore ?: return@launch
+            try {
+                val docId = if (settlement.webOrderId.isNotBlank()) settlement.webOrderId else "SETTLE-${settlement.id}"
+                val map = hashMapOf(
+                    "id" to settlement.id,
+                    "webOrderId" to settlement.webOrderId,
+                    "posOrderId" to settlement.posOrderId,
+                    "customerName" to settlement.customerName,
+                    "customerPhone" to settlement.customerPhone,
+                    "deliveryAddress" to settlement.deliveryAddress,
+                    "driverName" to settlement.driverName,
+                    "totalAmount" to settlement.totalAmount,
+                    "paymentMethod" to settlement.paymentMethod,
+                    "completedAt" to settlement.completedAt,
+                    "settlementStatus" to settlement.settlementStatus
+                )
+                
+                // Write into caja_liquidaciones collection
+                db.collection("caja_liquidaciones")
+                    .document(docId)
+                    .set(map, SetOptions.merge())
+                    .await()
+
+                // Also update sub-document under caja/liquidaciones_delivery
+                db.collection("caja")
+                    .document("liquidaciones_delivery")
+                    .collection("entregas_dia")
+                    .document(docId)
+                    .set(map, SetOptions.merge())
+                    .await()
+
+                Log.d("FirestoreSync", "Liquidación de delivery registrada en Firestore con éxito: $docId")
+            } catch (e: Exception) {
+                Log.e("FirestoreSync", "Failed to record delivery settlement to Firestore: ${e.message}")
+            }
+        }
+    }
+
+    fun recordDeliveryIncidentToFirestore(
+        webOrderId: String,
+        posOrderId: Long?,
+        incidentNote: String,
+        driverName: String
+    ) {
+        externalScope.launch {
+            val db = firestore ?: return@launch
+            try {
+                val now = System.currentTimeMillis()
+                val updateMap = hashMapOf<String, Any>(
+                    "status" to "INCIDENCIA",
+                    "deliveryDriverName" to driverName,
+                    "deliveryIssueNote" to incidentNote,
+                    "incidentReportedAt" to now
+                )
+
+                db.collection("pedidos_web")
+                    .document(webOrderId)
+                    .set(updateMap, SetOptions.merge())
+                    .await()
+
+                if (posOrderId != null) {
+                    db.collection("orders")
+                        .document(posOrderId.toString())
+                        .set(updateMap, SetOptions.merge())
+                        .await()
+                }
+
+                val alertMap = hashMapOf(
+                    "orderId" to webOrderId,
+                    "driverName" to driverName,
+                    "incidentNote" to incidentNote,
+                    "reportedAt" to now,
+                    "resolved" to false
+                )
+                db.collection("incidencias_delivery")
+                    .document("${webOrderId}_$now")
+                    .set(alertMap, SetOptions.merge())
+                    .await()
+
+                Log.d("FirestoreSync", "Incidencia de delivery registrada en Firestore: $webOrderId")
+            } catch (e: Exception) {
+                Log.e("FirestoreSync", "Failed to record delivery incident to Firestore: ${e.message}")
             }
         }
     }

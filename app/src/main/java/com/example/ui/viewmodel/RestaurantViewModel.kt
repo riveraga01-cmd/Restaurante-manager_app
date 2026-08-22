@@ -15,10 +15,11 @@ import com.google.firebase.auth.FirebaseUser
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
-enum class MainRole { INICIO, MESERO, COCINA, CAJA, GERENTE }
+enum class MainRole { INICIO, MESERO, COCINA, CAJA, GERENTE, REPARTIDOR }
 enum class WaiterTab { MAPA_MESAS, NUEVO_PEDIDO, PEDIDOS_ACTIVOS, HISTORIAL }
 enum class CashierTab { POR_COBRAR, VENTAS_DIA, CIERRE_TURNO }
 enum class ManagerTab { MENU, TEMAS_WEB, INVENTARIO, FACTURACION, RESUMEN_FINANCIERO, VENTAS, HISTORIAL, EMPLEADOS, AUDIT_LOGS, SEGURIDAD, QR_MENU, CONFIGURACION }
+enum class DeliveryTab { LISTOS, EN_CAMINO, INCIDENCIAS, HISTORIAL }
 
 class RestaurantViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -44,8 +45,15 @@ class RestaurantViewModel(application: Application) : AndroidViewModel(applicati
 
     // --- SYSTEM SETTINGS FLOW ---
     val systemSettings: StateFlow<SystemSettingsEntity> = repository.systemSettings
-        .map { it ?: SystemSettingsEntity(id = 1) }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), SystemSettingsEntity(id = 1))
+        .map { settings ->
+            val current = settings ?: SystemSettingsEntity(id = 1)
+            if (current.website.isBlank() || current.website == "www.restauranterivera.com") {
+                current.copy(website = "https://riveraga01-cmd.github.io/Restaurante-manager_app/")
+            } else {
+                current
+            }
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), SystemSettingsEntity(id = 1, website = "https://riveraga01-cmd.github.io/Restaurante-manager_app/"))
 
     fun saveSystemSettings(settings: SystemSettingsEntity, onComplete: () -> Unit = {}) {
         viewModelScope.launch {
@@ -81,6 +89,7 @@ class RestaurantViewModel(application: Application) : AndroidViewModel(applicati
                     "COCINA" -> MainRole.COCINA
                     "CAJA" -> MainRole.CAJA
                     "GERENTE" -> MainRole.GERENTE
+                    "REPARTIDOR", "DELIVERY" -> MainRole.REPARTIDOR
                     else -> MainRole.INICIO
                 }
                 _currentRole.value = targetRole
@@ -169,6 +178,7 @@ class RestaurantViewModel(application: Application) : AndroidViewModel(applicati
             MainRole.COCINA -> roleName in listOf("COCINA", "GERENTE", "ADMIN", "ADMINISTRADOR")
             MainRole.CAJA -> roleName in listOf("CAJA", "GERENTE", "ADMIN", "ADMINISTRADOR")
             MainRole.GERENTE -> roleName in listOf("GERENTE", "ADMIN", "ADMINISTRADOR")
+            MainRole.REPARTIDOR -> roleName in listOf("REPARTIDOR", "CAJA", "GERENTE", "ADMIN", "ADMINISTRADOR")
         }
     }
 
@@ -178,14 +188,14 @@ class RestaurantViewModel(application: Application) : AndroidViewModel(applicati
 
         when (role) {
             MainRole.CAJA -> {
-                if (user != null && roleName in listOf("MESERO", "COCINA")) {
+                if (user != null && roleName in listOf("MESERO", "COCINA", "REPARTIDOR")) {
                     _accessRestrictedMessage.value = "Acceso Restringido: El usuario '${user.name}' tiene rol '$roleName'. El Módulo Caja requiere permisos de Cajero o Gerente."
                     return
                 }
                 navigateToRole(MainRole.CAJA)
             }
             MainRole.GERENTE -> {
-                if (user != null && roleName in listOf("MESERO", "COCINA")) {
+                if (user != null && roleName in listOf("MESERO", "COCINA", "REPARTIDOR")) {
                     _accessRestrictedMessage.value = "Acceso Restringido: El usuario '${user.name}' tiene rol '$roleName'. El Módulo Gerente requiere autorización de Gerencia con PIN."
                     return
                 }
@@ -194,6 +204,13 @@ class RestaurantViewModel(application: Application) : AndroidViewModel(applicati
                 } else {
                     navigateToRole(MainRole.GERENTE)
                 }
+            }
+            MainRole.REPARTIDOR -> {
+                if (user != null && roleName in listOf("COCINA")) {
+                    _accessRestrictedMessage.value = "Acceso Restringido: El usuario '${user.name}' tiene rol '$roleName'. El Módulo Repartidor es para Personal de Entregas, Caja o Gerente."
+                    return
+                }
+                navigateToRole(MainRole.REPARTIDOR)
             }
             else -> {
                 navigateToRole(role)
@@ -308,6 +325,9 @@ class RestaurantViewModel(application: Application) : AndroidViewModel(applicati
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     val managerUsers: StateFlow<List<UserEntity>> = repository.getUsersByRole("GERENTE")
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val repartidorUsers: StateFlow<List<UserEntity>> = repository.getUsersByRole("REPARTIDOR")
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     private val _currentUser = MutableStateFlow<UserEntity?>(null)
@@ -1641,6 +1661,60 @@ class RestaurantViewModel(application: Application) : AndroidViewModel(applicati
             )
             saveSystemSettings(updated, onComplete)
             logAuditEvent("CONFIG_FACTURACION", "Configuración de datos fiscales y personalización de factura actualizada.")
+        }
+    }
+
+    // --- REPARTIDOR (DELIVERY) MODULE STATE & ACTIONS ---
+    private val _deliveryTab = MutableStateFlow(DeliveryTab.LISTOS)
+    val deliveryTab: StateFlow<DeliveryTab> = _deliveryTab.asStateFlow()
+    fun setDeliveryTab(tab: DeliveryTab) { _deliveryTab.value = tab }
+
+    private val _deliveryDriverName = MutableStateFlow("Héctor Soto")
+    val deliveryDriverName: StateFlow<String> = _deliveryDriverName.asStateFlow()
+    fun setDeliveryDriverName(name: String) { _deliveryDriverName.value = name }
+
+    val allDeliveryOrders: StateFlow<List<WebOrderEntity>> = repository.allDeliveryOrders
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val readyDeliveryOrders: StateFlow<List<WebOrderEntity>> = repository.readyDeliveryOrders
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val inTransitDeliveryOrders: StateFlow<List<WebOrderEntity>> = repository.inTransitDeliveryOrders
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val completedDeliveryOrders: StateFlow<List<WebOrderEntity>> = repository.completedDeliveryOrders
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val incidentDeliveryOrders: StateFlow<List<WebOrderEntity>> = repository.incidentDeliveryOrders
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val allDeliverySettlements: StateFlow<List<DeliverySettlementEntity>> = repository.allDeliverySettlements
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val todayDeliverySettlements: StateFlow<List<DeliverySettlementEntity>> = repository.todayDeliverySettlements
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    fun startDelivery(webOrderId: Long, onSuccess: () -> Unit = {}) {
+        viewModelScope.launch {
+            val driver = currentUser.value?.name ?: _deliveryDriverName.value
+            repository.startDelivery(webOrderId, driver)
+            onSuccess()
+        }
+    }
+
+    fun completeDelivery(webOrderId: Long, onSuccess: () -> Unit = {}) {
+        viewModelScope.launch {
+            val driver = currentUser.value?.name ?: _deliveryDriverName.value
+            repository.completeDelivery(webOrderId, driver)
+            onSuccess()
+        }
+    }
+
+    fun reportDeliveryIncident(webOrderId: Long, incidentNote: String, onSuccess: () -> Unit = {}) {
+        viewModelScope.launch {
+            val driver = currentUser.value?.name ?: _deliveryDriverName.value
+            repository.reportDeliveryIncident(webOrderId, driver, incidentNote)
+            onSuccess()
         }
     }
 }

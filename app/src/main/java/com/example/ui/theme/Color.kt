@@ -241,6 +241,7 @@ val DarkStatusCanceladoText = Color(0xFFFCA5A5)
 
 // Utility Functional Accents
 val EmeraldSuccess = SemanticMesaLibre
+val SuccessGreen = EmeraldSuccess
 val AmberWarning = SemanticCocinaEnEspera
 val BlueInfo = SemanticMesaCobrar
 val RedError = SemanticMesaOcupada

@@ -127,6 +127,12 @@ fun RestaurantAppMain(viewModel: RestaurantViewModel) {
                 onBackToInicio = { viewModel.navigateBackToInicio() }
             )
         }
+        MainRole.REPARTIDOR -> {
+            RepartidorScreen(
+                viewModel = viewModel,
+                onBackToInicio = { viewModel.navigateBackToInicio() }
+            )
+        }
     }
 
     if (showPinPrompt) {

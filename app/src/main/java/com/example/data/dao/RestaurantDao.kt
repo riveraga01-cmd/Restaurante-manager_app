@@ -400,6 +400,47 @@ interface RestaurantDao {
     @Query("UPDATE web_orders SET status = :status, posOrderId = :posOrderId, validatedAt = :validatedAt WHERE id = :id")
     suspend fun validateAndLinkWebOrder(id: Long, status: String, posOrderId: Long, validatedAt: Long)
 
+    @Query("SELECT * FROM web_orders WHERE posOrderId = :posOrderId LIMIT 1")
+    suspend fun getWebOrderByPosOrderId(posOrderId: Long): WebOrderEntity?
+
+    @Query("SELECT * FROM web_orders WHERE origin = 'Delivery/WhatsApp' OR origin LIKE '%Delivery%' OR origin LIKE '%WhatsApp%' OR deliveryAddress != '' ORDER BY createdAt DESC")
+    fun getAllDeliveryOrders(): Flow<List<WebOrderEntity>>
+
+    @Query("SELECT * FROM web_orders WHERE (origin = 'Delivery/WhatsApp' OR origin LIKE '%Delivery%' OR origin LIKE '%WhatsApp%' OR deliveryAddress != '') AND status IN ('Listo para Entrega', 'Listo', 'FINALIZADO') ORDER BY createdAt ASC")
+    fun getReadyDeliveryOrders(): Flow<List<WebOrderEntity>>
+
+    @Query("SELECT * FROM web_orders WHERE (origin = 'Delivery/WhatsApp' OR origin LIKE '%Delivery%' OR origin LIKE '%WhatsApp%' OR deliveryAddress != '') AND status IN ('En Camino', 'EN_CAMINO') ORDER BY deliveryStartedAt DESC, createdAt DESC")
+    fun getInTransitDeliveryOrders(): Flow<List<WebOrderEntity>>
+
+    @Query("SELECT * FROM web_orders WHERE (origin = 'Delivery/WhatsApp' OR origin LIKE '%Delivery%' OR origin LIKE '%WhatsApp%' OR deliveryAddress != '') AND status IN ('Entregado', 'ENTREGADO', 'PAGADO') ORDER BY deliveryFinishedAt DESC, createdAt DESC")
+    fun getCompletedDeliveryOrders(): Flow<List<WebOrderEntity>>
+
+    @Query("SELECT * FROM web_orders WHERE (origin = 'Delivery/WhatsApp' OR origin LIKE '%Delivery%' OR origin LIKE '%WhatsApp%' OR deliveryAddress != '') AND status = 'INCIDENCIA' ORDER BY createdAt DESC")
+    fun getIncidentDeliveryOrders(): Flow<List<WebOrderEntity>>
+
+    @Query("UPDATE web_orders SET status = :status, deliveryDriverName = :driverName, deliveryStartedAt = :startedAt, deliveryFinishedAt = :finishedAt, notes = CASE WHEN :notes IS NOT NULL THEN :notes ELSE notes END WHERE id = :id")
+    suspend fun updateDeliveryOrderStatus(id: Long, status: String, driverName: String, startedAt: Long?, finishedAt: Long?, notes: String?)
+
+    @Query("UPDATE web_orders SET status = :status, deliveryDriverName = :driverName, deliveryIssueNote = :incidentNote WHERE id = :id")
+    suspend fun updateDeliveryIncident(id: Long, status: String, incidentNote: String, driverName: String)
+
     @Query("DELETE FROM web_orders WHERE id = :id")
     suspend fun deleteWebOrderById(id: Long)
+
+
+    // --- DELIVERY SETTLEMENTS (LIQUIDACIONES CAJA) ---
+    @Query("SELECT * FROM delivery_settlements ORDER BY completedAt DESC")
+    fun getAllDeliverySettlements(): Flow<List<DeliverySettlementEntity>>
+
+    @Query("SELECT * FROM delivery_settlements WHERE completedAt >= :startTimestamp ORDER BY completedAt DESC")
+    fun getTodayDeliverySettlements(startTimestamp: Long): Flow<List<DeliverySettlementEntity>>
+
+    @Query("SELECT * FROM delivery_settlements WHERE driverName = :driverName ORDER BY completedAt DESC")
+    fun getDeliverySettlementsByDriver(driverName: String): Flow<List<DeliverySettlementEntity>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertDeliverySettlement(settlement: DeliverySettlementEntity): Long
+
+    @Query("DELETE FROM delivery_settlements WHERE id = :id")
+    suspend fun deleteDeliverySettlementById(id: Long)
 }

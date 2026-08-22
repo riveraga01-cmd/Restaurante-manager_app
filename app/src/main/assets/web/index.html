@@ -4,14 +4,96 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Menú Digital | Restaurante Rivera</title>
-    <meta name="description" content="Menú digital interactivo en tiempo real para clientes de Restaurante Rivera.">
+    <meta name="description" content="Descubre el menú digital interactivo de Restaurante Rivera. Explora exquisitos platillos fuertes, entradas, postres y bebidas artesanales con pedidos en tiempo real y entrega a domicilio.">
+    <meta name="keywords" content="Restaurante Rivera, Menú Digital, Comida Gourmet, Pedidos en Línea, Servicio a Domicilio, Restaurante, Platillos, Bebidas, Postres">
+    <meta name="author" content="Restaurante Rivera">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#1E3A8A">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Restaurante Rivera">
+
+    <!-- Open Graph (OG) Tags for Social Media (WhatsApp, Facebook, Telegram, LinkedIn, Instagram) -->
+    <meta property="og:type" content="restaurant.menu">
+    <meta property="og:site_name" content="Restaurante Rivera">
+    <meta property="og:title" content="🍽️ Menú Digital | Restaurante Rivera - Sabor Inigualable">
+    <meta property="og:description" content="Explora nuestro menú interactivo con platillos exclusivos, postres y bebidas. Realiza tu pedido con seguimiento en tiempo real y entrega a domicilio o mesa.">
+    <meta property="og:image" content="images/cat_fuertes.jpg">
+    <meta property="og:image:secure_url" content="images/cat_fuertes.jpg">
+    <meta property="og:image:type" content="image/jpeg">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta property="og:image:alt" content="Menú Digital de Restaurante Rivera - Alta Gastronomía y Sabor Tradicional">
+    <meta property="og:locale" content="es_GT">
+    <meta property="og:locale:alternate" content="es_ES">
+
+    <!-- Twitter / X Card Tags -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:site" content="@RestauranteRivera">
+    <meta name="twitter:creator" content="@RestauranteRivera">
+    <meta name="twitter:title" content="🍽️ Menú Digital | Restaurante Rivera">
+    <meta name="twitter:description" content="Conoce nuestros platillos y bebidas. Realiza tu orden online con estado en tiempo real y notificaciones directas.">
+    <meta name="twitter:image" content="images/cat_fuertes.jpg">
+    <meta name="twitter:image:alt" content="Platillos destacados de Restaurante Rivera">
+
+    <!-- Schema.org JSON-LD Structured Data for Rich Snippets -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "Restaurant",
+      "name": "Restaurante Rivera",
+      "image": "images/cat_fuertes.jpg",
+      "description": "Restaurante con exquisita gastronomía artesanal, platillos gourmet, entradas, postres y bebidas con pedidos en línea.",
+      "servesCuisine": "Guatemalteca, Internacional, Fusión Gourmet",
+      "priceRange": "Q25 - Q150",
+      "currenciesAccepted": "GTQ",
+      "paymentAccepted": "Cash, Credit Card",
+      "telephone": "+50255551234",
+      "openingHoursSpecification": [
+        {
+          "@type": "OpeningHoursSpecification",
+          "dayOfWeek": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"],
+          "opens": "07:00",
+          "closes": "22:00"
+        }
+      ],
+      "hasMenu": {
+        "@type": "Menu",
+        "name": "Menú Principal y Digital Rivera",
+        "hasMenuSection": [
+          {
+            "@type": "MenuSection",
+            "name": "Entradas",
+            "description": "Deliciosos aperitivos y entremeses"
+          },
+          {
+            "@type": "MenuSection",
+            "name": "Platillos Fuertes",
+            "description": "Carnes, mariscos y especialidades de la casa"
+          },
+          {
+            "@type": "MenuSection",
+            "name": "Bebidas",
+            "description": "Bebidas naturales, refrescantes y cafés gourmet"
+          },
+          {
+            "@type": "MenuSection",
+            "name": "Postres",
+            "description": "Repostería y dulces artesanales"
+          }
+        ]
+      }
+    }
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Playfair+Display:wght@700;800&display=swap" rel="stylesheet">
     
-    <!-- Firebase App & Firestore JS SDK (Modular Compat) -->
+    <!-- Firebase App, Firestore & Messaging JS SDK (Modular Compat) -->
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-messaging-compat.js"></script>
 
     <style>
         :root {
@@ -751,18 +833,252 @@
             gap: 16px;
         }
 
+        /* Predictive Search Dropdown */
+        .predictive-dropdown {
+            position: absolute;
+            top: calc(100% + 4px);
+            left: 0;
+            right: 0;
+            background: var(--surface-color);
+            border: 1.5px solid var(--border-color);
+            border-radius: 14px;
+            box-shadow: 0 12px 28px -4px rgba(0,0,0,0.15), 0 4px 10px rgba(0,0,0,0.06);
+            z-index: 60;
+            overflow: hidden;
+            animation: toastSlideDown 0.2s ease-out;
+        }
+
+        .predictive-header {
+            padding: 8px 12px;
+            background: #F8FAFC;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 11.5px;
+            font-weight: 700;
+            color: var(--text-muted);
+        }
+
+        .predictive-list {
+            max-height: 280px;
+            overflow-y: auto;
+        }
+
+        .predictive-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 9px 12px;
+            border-bottom: 1px solid #F1F5F9;
+            cursor: pointer;
+            transition: background-color 0.15s ease;
+        }
+
+        .predictive-item:last-child {
+            border-bottom: none;
+        }
+
+        .predictive-item:hover, .predictive-item.selected {
+            background: #EFF6FF;
+        }
+
+        .predictive-thumb {
+            width: 38px;
+            height: 38px;
+            border-radius: 8px;
+            object-fit: cover;
+            flex-shrink: 0;
+            background: #E2E8F0;
+        }
+
+        .predictive-info {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .predictive-name {
+            font-size: 13px;
+            font-weight: 700;
+            color: var(--text-main);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .predictive-name mark {
+            background: #FEF08A;
+            color: #854D0E;
+            font-weight: 800;
+            border-radius: 2px;
+            padding: 0 1px;
+        }
+
+        .predictive-meta {
+            font-size: 11.5px;
+            color: var(--text-muted);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            margin-top: 1px;
+        }
+
+        .predictive-price {
+            font-weight: 800;
+            color: var(--primary-light);
+        }
+
+        .predictive-btn-add {
+            background: #EEF2FF;
+            color: var(--primary-color);
+            border: 1px solid #C7D2FE;
+            border-radius: 6px;
+            font-size: 11px;
+            font-weight: 700;
+            padding: 4px 8px;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+
+        .predictive-btn-add:hover {
+            background: var(--primary-color);
+            color: white;
+        }
+
+        .predictive-footer {
+            padding: 8px 12px;
+            background: #F8FAFC;
+            border-top: 1px solid var(--border-color);
+            text-align: center;
+            font-size: 12px;
+            font-weight: 700;
+            color: var(--primary-color);
+            cursor: pointer;
+        }
+
+        .predictive-footer:hover {
+            text-decoration: underline;
+        }
+
+        /* Business Hours Badges & Alerts */
+        .schedule-badge {
+            font-size: 11px;
+            font-weight: 700;
+            padding: 3px 8px;
+            border-radius: 12px;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .schedule-badge.open {
+            background: #DCFCE7;
+            color: #166534;
+            border: 1px solid #BBF7D0;
+        }
+
+        .schedule-badge.closed {
+            background: #FEE2E2;
+            color: #991B1B;
+            border: 1px solid #FECACA;
+        }
+
+        .schedule-alert {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            padding: 12px 14px;
+            border-radius: 12px;
+            font-size: 12.5px;
+            line-height: 1.35;
+        }
+
+        .schedule-alert.closed {
+            background: #FEF2F2;
+            border: 1px solid #FECACA;
+            color: #991B1B;
+        }
+
+        .schedule-alert-icon {
+            font-size: 18px;
+            flex-shrink: 0;
+        }
+
+        /* Cart Modal Tabs */
+        .modal-tabs {
+            display: flex;
+            background: #F1F5F9;
+            padding: 4px;
+            border-radius: 12px;
+            gap: 4px;
+        }
+
+        .modal-tab-btn {
+            flex: 1;
+            padding: 8px 12px;
+            border: none;
+            background: transparent;
+            color: var(--text-muted);
+            font-size: 13px;
+            font-weight: 700;
+            border-radius: 9px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+        }
+
+        .modal-tab-btn.active {
+            background: white;
+            color: var(--primary-color);
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+
+        .tab-badge {
+            background: var(--primary-color);
+            color: white;
+            font-size: 10px;
+            font-weight: 800;
+            padding: 1px 6px;
+            border-radius: 10px;
+        }
+
+        .modal-tab-btn.active .tab-badge {
+            background: var(--primary-color);
+            color: white;
+        }
+
+        /* Smooth Fade-in & Slide-up for Cart Items */
         .cart-items-list {
             display: flex;
             flex-direction: column;
-            gap: 12px;
+            gap: 10px;
         }
 
         .cart-item-row {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding-bottom: 12px;
-            border-bottom: 1px solid var(--border-color);
+            padding: 11px 14px;
+            background: #F8FAFC;
+            border-radius: 14px;
+            border: 1px solid var(--border-color);
+            animation: cartItemSlideUp 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
+            animation-delay: calc(var(--item-idx, 0) * 0.05s);
+            transition: transform 0.2s, background-color 0.2s;
+        }
+
+        @keyframes cartItemSlideUp {
+            from {
+                opacity: 0;
+                transform: translateY(14px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
         }
 
         .cart-item-info h4 {
@@ -774,6 +1090,127 @@
         .cart-item-info p {
             font-size: 12px;
             color: var(--text-muted);
+        }
+
+        /* Order History View Styles */
+        .history-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .history-card {
+            background: #F8FAFC;
+            border: 1px solid var(--border-color);
+            border-radius: 14px;
+            padding: 14px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            animation: cartItemSlideUp 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
+        }
+
+        .history-card-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px dashed var(--border-color);
+            padding-bottom: 8px;
+        }
+
+        .history-order-id {
+            font-size: 14px;
+            font-weight: 800;
+            color: var(--primary-color);
+        }
+
+        .history-order-date {
+            font-size: 11px;
+            color: var(--text-muted);
+        }
+
+        .history-status-badge {
+            font-size: 11px;
+            font-weight: 800;
+            padding: 3px 8px;
+            border-radius: 8px;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .history-status-badge.pending {
+            background: #FEF3C7;
+            color: #92400E;
+            border: 1px solid #FCD34D;
+        }
+
+        .history-status-badge.cooking {
+            background: #DBEAFE;
+            color: #1E40AF;
+            border: 1px solid #93C5FD;
+        }
+
+        .history-status-badge.ready {
+            background: #DCFCE7;
+            color: #166534;
+            border: 1px solid #86EFAC;
+        }
+
+        .history-items-summary {
+            font-size: 12px;
+            color: var(--text-main);
+            background: white;
+            border-radius: 8px;
+            padding: 8px 10px;
+            border: 1px solid #EEF2F6;
+        }
+
+        .history-items-summary p {
+            margin: 2px 0;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .history-card-footer {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding-top: 4px;
+        }
+
+        .history-total {
+            font-size: 14px;
+            font-weight: 800;
+            color: var(--text-main);
+        }
+
+        .history-actions {
+            display: flex;
+            gap: 6px;
+        }
+
+        .btn-reorder {
+            background: #EEF2FF;
+            color: var(--primary-color);
+            border: 1px solid #C7D2FE;
+            font-size: 11.5px;
+            font-weight: 700;
+            padding: 5px 10px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-reorder:hover {
+            background: var(--primary-color);
+            color: white;
+        }
+
+        .btn-confirm-order.disabled-closed {
+            background: #94A3B8 !important;
+            box-shadow: none !important;
+            cursor: not-allowed !important;
         }
 
         .cart-qty-control {
@@ -809,28 +1246,217 @@
         .form-group {
             display: flex;
             flex-direction: column;
-            gap: 6px;
+            gap: 5px;
+            position: relative;
         }
 
         .form-group label {
             font-size: 13px;
             font-weight: 700;
             color: var(--text-main);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .required-star {
+            color: #DC2626;
+            font-weight: 800;
+        }
+
+        .input-wrapper {
+            position: relative;
+            display: flex;
+            align-items: center;
         }
 
         .form-input, .form-select {
-            padding: 10px 12px;
+            width: 100%;
+            padding: 10px 36px 10px 12px;
             border-radius: 10px;
-            border: 1px solid var(--border-color);
-            font-size: 14px;
+            border: 1.5px solid var(--border-color);
+            font-size: 13.5px;
             font-family: inherit;
             outline: none;
             background: #F8FAFC;
+            transition: all 0.2s ease;
+        }
+
+        .form-select {
+            padding-right: 12px;
         }
 
         .form-input:focus, .form-select:focus {
             border-color: var(--primary-color);
             background: white;
+            box-shadow: 0 0 0 3px rgba(30, 58, 138, 0.12);
+        }
+
+        .form-input.is-valid, .form-select.is-valid {
+            border-color: #16A34A !important;
+            background: #F0FDF4 !important;
+        }
+
+        .form-input.is-invalid, .form-select.is-invalid {
+            border-color: #DC2626 !important;
+            background: #FEF2F2 !important;
+            box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.1);
+        }
+
+        .field-icon {
+            position: absolute;
+            right: 11px;
+            font-size: 14px;
+            pointer-events: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .field-feedback {
+            font-size: 11.5px;
+            font-weight: 600;
+            display: none;
+            align-items: center;
+            gap: 4px;
+            margin-top: 2px;
+            animation: toastSlideDown 0.18s ease-out;
+        }
+
+        .field-feedback.error {
+            display: flex;
+            color: #DC2626;
+        }
+
+        .field-feedback.success {
+            display: flex;
+            color: #16A34A;
+        }
+
+        /* Notification Prompt Card in Modal */
+        .notification-optin-card {
+            background: #EFF6FF;
+            border: 1.5px solid #BFDBFE;
+            border-radius: 12px;
+            padding: 12px 14px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+        }
+
+        .notification-optin-info {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .notification-optin-info span:first-child {
+            font-size: 20px;
+        }
+
+        .notification-optin-text h5 {
+            font-size: 12.5px;
+            font-weight: 800;
+            color: #1E40AF;
+        }
+
+        .notification-optin-text p {
+            font-size: 11px;
+            color: #3B82F6;
+            margin-top: 1px;
+        }
+
+        .btn-toggle-notif {
+            background: var(--primary-color);
+            color: white;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 8px;
+            font-size: 11.5px;
+            font-weight: 700;
+            cursor: pointer;
+            white-space: nowrap;
+            transition: all 0.2s ease;
+        }
+
+        .btn-toggle-notif.active {
+            background: #16A34A;
+        }
+
+        /* Ready Order Celebration Modal Overlay */
+        .order-ready-banner {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%) translateY(-30px);
+            max-width: 440px;
+            width: calc(100% - 32px);
+            background: linear-gradient(135deg, #1E3A8A 0%, #172554 100%);
+            color: white;
+            border-radius: 18px;
+            padding: 18px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.3), 0 0 0 2px rgba(255,255,255,0.2);
+            z-index: 2000;
+            display: none;
+            opacity: 0;
+            transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        .order-ready-banner.show {
+            display: block;
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
+        }
+
+        .order-ready-content {
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+        }
+
+        .order-ready-icon {
+            font-size: 32px;
+            background: rgba(255,255,255,0.15);
+            width: 50px;
+            height: 50px;
+            border-radius: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            animation: bounceSoft 1s infinite alternate;
+        }
+
+        .order-ready-title {
+            font-size: 16px;
+            font-weight: 800;
+            color: #FEF08A;
+        }
+
+        .order-ready-desc {
+            font-size: 12.5px;
+            margin-top: 4px;
+            color: #E2E8F0;
+            line-height: 1.35;
+        }
+
+        .btn-order-ready-dismiss {
+            margin-top: 12px;
+            width: 100%;
+            background: #F59E0B;
+            color: #78350F;
+            border: none;
+            padding: 9px;
+            border-radius: 10px;
+            font-size: 13px;
+            font-weight: 800;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .btn-order-ready-dismiss:hover {
+            background: #FBBF24;
         }
 
         .order-summary-box {
@@ -1068,6 +1694,151 @@
             transform: scale(1.04);
         }
 
+        /* Offline Status Bar Banner */
+        .offline-status-banner {
+            background: linear-gradient(135deg, #475569 0%, #1E293B 100%);
+            color: #F8FAFC;
+            padding: 8px 16px;
+            font-size: 12px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            border-bottom: 2px solid #F59E0B;
+            transition: all 0.3s ease;
+        }
+
+        .offline-status-banner.is-online {
+            background: #15803D;
+            border-bottom-color: #4ADE80;
+        }
+
+        /* Complementary Products Cross-Selling in Cart */
+        .cross-sell-section {
+            background: #F0FDF4;
+            border: 1.5px dashed #86EFAC;
+            border-radius: 14px;
+            padding: 12px 14px;
+            margin-top: 12px;
+            margin-bottom: 4px;
+            animation: cartItemSlideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        .cross-sell-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 8px;
+        }
+
+        .cross-sell-title {
+            font-size: 12.5px;
+            font-weight: 800;
+            color: #166534;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .cross-sell-tag {
+            font-size: 10px;
+            font-weight: 800;
+            background: #DCFCE7;
+            color: #15803D;
+            padding: 2px 6px;
+            border-radius: 6px;
+            border: 1px solid #86EFAC;
+            text-transform: uppercase;
+        }
+
+        .cross-sell-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+            gap: 8px;
+        }
+
+        .cross-sell-card {
+            background: white;
+            border: 1px solid #BBF7D0;
+            border-radius: 10px;
+            padding: 8px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .cross-sell-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.08);
+        }
+
+        .cross-sell-img-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 6px;
+        }
+
+        .cross-sell-thumb {
+            width: 38px;
+            height: 38px;
+            border-radius: 8px;
+            object-fit: cover;
+            flex-shrink: 0;
+        }
+
+        .cross-sell-info h5 {
+            font-size: 12px;
+            font-weight: 800;
+            color: var(--text-main);
+            line-height: 1.2;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+
+        .cross-sell-info p {
+            font-size: 10px;
+            color: var(--text-muted);
+            margin-top: 1px;
+        }
+
+        .cross-sell-footer {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-top: 4px;
+            padding-top: 4px;
+            border-top: 1px dashed #E2E8F0;
+        }
+
+        .cross-sell-price {
+            font-size: 12px;
+            font-weight: 800;
+            color: var(--primary-color);
+        }
+
+        .btn-add-cross-sell {
+            background: #16A34A;
+            color: white;
+            border: none;
+            padding: 4px 8px;
+            border-radius: 6px;
+            font-size: 10.5px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: background 0.15s ease, transform 0.1s ease;
+        }
+
+        .btn-add-cross-sell:hover {
+            background: #15803D;
+            transform: scale(1.05);
+        }
+
         @keyframes toastSlideDown {
             from { transform: translateY(-120%); opacity: 0; }
             to { transform: translateY(0); opacity: 1; }
@@ -1077,9 +1848,296 @@
             from { transform: translateY(0); opacity: 1; }
             to { transform: translateY(-30px); opacity: 0; }
         }
+
+        /* Festive Confetti Canvas & Confirmation Bubbles Animation */
+        #confettiCanvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            pointer-events: none;
+            z-index: 10050;
+            display: none;
+        }
+
+        .confirmation-bubble {
+            position: fixed;
+            border-radius: 50%;
+            pointer-events: none;
+            z-index: 10040;
+            animation: bubbleRiseAndPop 1.2s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+        }
+
+        @keyframes bubbleRiseAndPop {
+            0% {
+                transform: translate(-50%, -50%) scale(0.2);
+                opacity: 0.95;
+            }
+            60% {
+                transform: translate(calc(-50% + var(--dx, 0px)), calc(-50% - var(--dy, 120px))) scale(1.1);
+                opacity: 0.85;
+            }
+            100% {
+                transform: translate(calc(-50% + var(--dx, 0px)), calc(-50% - var(--dy, 220px))) scale(1.4);
+                opacity: 0;
+            }
+        }
+
+        .btn-confirm-order.celebrating {
+            animation: confirmBtnPulse 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            background: linear-gradient(135deg, #10B981 0%, #059669 100%) !important;
+        }
+
+        @keyframes confirmBtnPulse {
+            0% { transform: scale(1); }
+            40% { transform: scale(1.04); box-shadow: 0 0 24px rgba(16, 185, 129, 0.6); }
+            100% { transform: scale(1); }
+        }
+
+        /* LocalStorage Auto-fill Info Badge */
+        .autofill-info-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            background: #EFF6FF;
+            border: 1px solid #BFDBFE;
+            color: #1D4ED8;
+            padding: 4px 9px;
+            border-radius: 8px;
+            font-size: 11px;
+            font-weight: 700;
+            margin-bottom: 2px;
+            animation: toastSlideDown 0.2s ease-out;
+        }
+
+        /* Item Specific Notes & Quick Chips in Cart */
+        .cart-item-card {
+            background: #F8FAFC;
+            border: 1.5px solid var(--border-color);
+            border-radius: 14px;
+            padding: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            animation: cartItemSlideUp 0.35s cubic-bezier(0.16, 1, 0.3, 1) both;
+            animation-delay: calc(var(--item-idx, 0) * 0.05s);
+            transition: border-color 0.2s, background-color 0.2s;
+        }
+
+        .cart-item-card:hover {
+            border-color: #CBD5E1;
+        }
+
+        .cart-item-main-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .cart-item-notes-section {
+            background: #FFFFFF;
+            border: 1px solid #E2E8F0;
+            border-radius: 10px;
+            padding: 8px 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .cart-item-notes-input-wrapper {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            position: relative;
+        }
+
+        .cart-item-notes-input-wrapper .note-icon {
+            font-size: 13px;
+            opacity: 0.7;
+        }
+
+        .cart-item-notes-input {
+            flex: 1;
+            border: none;
+            outline: none;
+            font-size: 12px;
+            font-family: inherit;
+            color: var(--text-main);
+            background: transparent;
+            padding: 2px 0;
+        }
+
+        .cart-item-notes-input::placeholder {
+            color: #94A3B8;
+            font-size: 11.5px;
+        }
+
+        .btn-clear-item-note {
+            background: transparent;
+            border: none;
+            color: #94A3B8;
+            font-size: 11px;
+            font-weight: bold;
+            cursor: pointer;
+            padding: 2px 5px;
+            border-radius: 4px;
+        }
+
+        .btn-clear-item-note:hover {
+            background: #F1F5F9;
+            color: #EF4444;
+        }
+
+        .cart-item-chips-scroll {
+            display: flex;
+            gap: 5px;
+            overflow-x: auto;
+            padding-bottom: 2px;
+            scrollbar-width: none;
+        }
+
+        .cart-item-chips-scroll::-webkit-scrollbar {
+            display: none;
+        }
+
+        .item-quick-chip {
+            background: #F1F5F9;
+            border: 1px solid #E2E8F0;
+            color: #475569;
+            font-size: 11px;
+            font-weight: 600;
+            padding: 3px 8px;
+            border-radius: 12px;
+            cursor: pointer;
+            white-space: nowrap;
+            transition: all 0.15s ease;
+        }
+
+        .item-quick-chip:hover {
+            background: #E2E8F0;
+            color: #1E293B;
+        }
+
+        .item-quick-chip.active {
+            background: #FEF3C7;
+            border-color: #FCD34D;
+            color: #92400E;
+            font-weight: 700;
+        }
+
+        /* Table Occupied Warning Modal */
+        .table-occupied-backdrop {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(15, 23, 42, 0.65);
+            backdrop-filter: blur(4px);
+            z-index: 10020;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 16px;
+        }
+
+        .table-occupied-backdrop.show {
+            display: flex;
+        }
+
+        .table-occupied-card {
+            background: white;
+            border-radius: 20px;
+            padding: 22px;
+            max-width: 420px;
+            width: 100%;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+            border: 1px solid #E2E8F0;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            text-align: center;
+            animation: toastSlideDown 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        .table-occupied-icon {
+            width: 56px;
+            height: 56px;
+            border-radius: 50%;
+            background: #FEF3C7;
+            border: 2px solid #FDE68A;
+            color: #D97706;
+            font-size: 28px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto;
+        }
+
+        .table-occupied-title {
+            font-size: 17px;
+            font-weight: 800;
+            color: var(--text-main);
+        }
+
+        .table-occupied-desc {
+            font-size: 13px;
+            color: var(--text-muted);
+            line-height: 1.4;
+        }
+
+        .table-occupied-info-box {
+            background: #FFFBEB;
+            border: 1px solid #FDE68A;
+            border-radius: 12px;
+            padding: 12px 14px;
+            text-align: left;
+            font-size: 12.5px;
+            color: #92400E;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .table-occupied-actions {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            margin-top: 6px;
+        }
+
+        .btn-proceed-additional {
+            background: var(--primary-color);
+            color: white;
+            border: none;
+            padding: 12px;
+            border-radius: 10px;
+            font-size: 14px;
+            font-weight: 800;
+            cursor: pointer;
+            transition: filter 0.2s;
+        }
+
+        .btn-change-table {
+            background: #F1F5F9;
+            color: var(--text-main);
+            border: 1px solid var(--border-color);
+            padding: 11px;
+            border-radius: 10px;
+            font-size: 13.5px;
+            font-weight: 700;
+            cursor: pointer;
+        }
     </style>
 </head>
 <body>
+
+    <!-- Offline / Online Real-Time Connectivity Banner -->
+    <div id="offlineBanner" class="offline-status-banner" style="display: none;">
+        <span id="offlineBannerIcon">📡</span>
+        <span id="offlineBannerText">Modo Offline Activo: Menú e historial cargados desde la memoria local.</span>
+    </div>
 
     <!-- Live Toast Alerts Notification System -->
     <div id="liveToastContainer" class="live-toast-container"></div>
@@ -1094,8 +2152,13 @@
             </div>
         </div>
 
-        <div id="tableDisplayPill" class="table-pill">
-            <span>📍</span> <span id="tableLabel">Mesa 1</span>
+        <div style="display: flex; align-items: center; gap: 8px;">
+            <div id="scheduleBadge" class="schedule-badge open">
+                <span>🕒</span> <span id="scheduleBadgeText">Abierto</span>
+            </div>
+            <div id="tableDisplayPill" class="table-pill">
+                <span>📍</span> <span id="tableLabel">Mesa 1</span>
+            </div>
         </div>
     </header>
 
@@ -1109,16 +2172,28 @@
         </div>
     </section>
 
-    <!-- Controls: Search with Voice & Category Chips -->
+    <!-- Controls: Search with Voice, Predictive Suggestions & Category Chips -->
     <section class="menu-controls">
         <div class="search-box" id="searchBoxContainer">
             <span class="search-icon">🔍</span>
-            <input type="text" id="searchInput" class="search-input" placeholder="Buscar platillos, bebidas, postres...">
+            <input type="text" id="searchInput" class="search-input" placeholder="Buscar platillos, bebidas, postres..." autocomplete="off">
             <div class="search-box-actions">
                 <button type="button" id="btnClearSearch" class="btn-clear-search" style="display: none;" title="Limpiar búsqueda">✕</button>
                 <button type="button" id="btnVoiceSearch" class="btn-voice-search" title="Buscar por voz con Web Speech">
                     <span id="voiceMicIcon">🎙️</span>
                 </button>
+            </div>
+
+            <!-- Predictive Autocomplete Dropdown -->
+            <div id="predictiveDropdown" class="predictive-dropdown" style="display: none;">
+                <div class="predictive-header">
+                    <span id="predictiveCount">Sugerencias del Menú</span>
+                    <span style="font-size: 10.5px; opacity: 0.8;">Toca para seleccionar</span>
+                </div>
+                <div class="predictive-list" id="predictiveList"></div>
+                <div class="predictive-footer" id="predictiveFooter" onclick="applyFullSearchFromPredictive()">
+                    Ver todos los resultados
+                </div>
             </div>
         </div>
 
@@ -1168,65 +2243,166 @@
     <div class="modal-backdrop" id="modalBackdrop" onclick="closeCartModal()"></div>
     <div class="cart-modal" id="cartModal">
         <div class="modal-header">
-            <h2>🛒 Tu Pedido</h2>
+            <h2>🛒 Tu Pedido y Órdenes</h2>
             <button class="btn-close-modal" onclick="closeCartModal()">✕</button>
         </div>
 
+        <!-- Navigation Tabs between Current Order & Order History -->
+        <div style="padding: 12px 20px 0 20px;">
+            <div class="modal-tabs">
+                <button type="button" class="modal-tab-btn active" id="tabBtnCurrent" onclick="switchModalTab('current')">
+                    <span>🛒 Mi Pedido</span>
+                    <span class="tab-badge" id="tabCountCurrent">0</span>
+                </button>
+                <button type="button" class="modal-tab-btn" id="tabBtnHistory" onclick="switchModalTab('history')">
+                    <span>📜 Historial</span>
+                    <span class="tab-badge" id="tabCountHistory" style="background: #64748B;">0</span>
+                </button>
+            </div>
+        </div>
+
         <div class="modal-body" id="modalBody">
-            <div class="cart-items-list" id="cartItemsList">
-                <!-- Items list rendered here -->
-            </div>
-
-            <div class="form-group">
-                <label for="inputCustomerName">Nombre de quien ordena *</label>
-                <input type="text" id="inputCustomerName" class="form-input" placeholder="Ej. Carlos Rivera">
-            </div>
-
-            <div class="form-group">
-                <label for="inputCustomerPhone">Teléfono / WhatsApp (Opcional)</label>
-                <input type="tel" id="inputCustomerPhone" class="form-input" placeholder="Ej. 502 5555-1234">
-            </div>
-
-            <div class="form-group">
-                <label for="selectOrigin">Ubicación / Mesa</label>
-                <select id="selectOrigin" class="form-select">
-                    <option value="Mesa 1">Mesa 1</option>
-                    <option value="Mesa 2">Mesa 2</option>
-                    <option value="Mesa 3">Mesa 3</option>
-                    <option value="Mesa 4">Mesa 4</option>
-                    <option value="Mesa 5">Mesa 5</option>
-                    <option value="Barra Principal">Barra Principal</option>
-                    <option value="Para Llevar / Pick-Up">Para Llevar / Pick-Up</option>
-                    <option value="A Domicilio">A Domicilio</option>
-                </select>
-            </div>
-
-            <div class="form-group">
-                <label for="selectPaymentMethod">Forma de Pago</label>
-                <select id="selectPaymentMethod" class="form-select">
-                    <option value="Efectivo al recibir">Efectivo al recibir</option>
-                    <option value="Tarjeta de Crédito / POS">Tarjeta de Crédito / POS</option>
-                    <option value="Transferencia Bancaria">Transferencia Bancaria</option>
-                </select>
-            </div>
-
-            <div class="form-group">
-                <label for="inputGeneralNotes">Instrucciones especiales para cocina</label>
-                <input type="text" id="inputGeneralNotes" class="form-input" placeholder="Ej. Servir sin hielo, salsa picante aparte...">
-            </div>
-
-            <div class="order-summary-box">
-                <div class="summary-line">
-                    <span>Subtotal</span>
-                    <span id="summarySubtotal">Q0.00</span>
+            <!-- View: Current Active Order -->
+            <div id="viewCurrentOrder">
+                <!-- Schedule Closed Warning Alert Container -->
+                <div id="scheduleAlertBox" class="schedule-alert closed" style="display: none; margin-bottom: 12px;">
+                    <div class="schedule-alert-icon">🕒</div>
+                    <div>
+                        <strong style="display: block; font-size: 13px;">Restaurante Cerrado Actualmente</strong>
+                        <p id="scheduleAlertMessage" style="font-size: 12px; margin-top: 2px;">
+                            Nuestro horario de atención es de 8:00 AM a 10:30 PM. No es posible enviar pedidos a cocina en este momento.
+                        </p>
+                    </div>
                 </div>
-                <div class="summary-line">
-                    <span>Servicio / Propina voluntaria (10%)</span>
-                    <span id="summaryTip">Q0.00</span>
+
+                <div class="cart-items-list" id="cartItemsList">
+                    <!-- Items list rendered here with smooth slide-up animation -->
                 </div>
-                <div class="summary-line total">
-                    <span>Total a Pagar</span>
-                    <span id="summaryTotal" style="color: var(--secondary-color);">Q0.00</span>
+
+                <!-- Complementary Products Up-selling Suggestions -->
+                <div id="crossSellContainer" style="display: none;"></div>
+
+                <div style="display: flex; flex-direction: column; gap: 14px; margin-top: 14px;">
+                    <!-- Autofill Indicator Badge -->
+                    <div id="autofillBadge" class="autofill-info-badge" style="display: none;">
+                        <span>⚡</span>
+                        <span>Datos autorrellenados de tu último pedido</span>
+                    </div>
+
+                    <!-- Real-Time Validated: Customer Name -->
+                    <div class="form-group" id="groupCustomerName">
+                        <label for="inputCustomerName">
+                            <span>Nombre de quien ordena</span>
+                            <span class="required-star">* Obligatorio</span>
+                        </label>
+                        <div class="input-wrapper">
+                            <input type="text" id="inputCustomerName" class="form-input" placeholder="Ej. Carlos Rivera" autocomplete="name">
+                            <span class="field-icon" id="nameStatusIcon"></span>
+                        </div>
+                        <div class="field-feedback" id="nameFeedback"></div>
+                    </div>
+
+                    <!-- Real-Time Validated: Customer Phone -->
+                    <div class="form-group" id="groupCustomerPhone">
+                        <label for="inputCustomerPhone">
+                            <span>Teléfono / WhatsApp</span>
+                            <span class="required-star">* Obligatorio</span>
+                        </label>
+                        <div class="input-wrapper">
+                            <input type="tel" id="inputCustomerPhone" class="form-input" placeholder="Ej. 5555-1234 o +502 5555 1234" autocomplete="tel">
+                            <span class="field-icon" id="phoneStatusIcon"></span>
+                        </div>
+                        <div class="field-feedback" id="phoneFeedback"></div>
+                    </div>
+
+                    <!-- Origin / Delivery Type -->
+                    <div class="form-group" id="groupOrigin">
+                        <label for="selectOrigin">
+                            <span>Ubicación / Tipo de Entrega</span>
+                            <span class="required-star">* Obligatorio</span>
+                        </label>
+                        <div class="input-wrapper">
+                            <select id="selectOrigin" class="form-select" onchange="handleOriginChange()">
+                                <option value="Mesa 1">Mesa 1</option>
+                                <option value="Mesa 2">Mesa 2</option>
+                                <option value="Mesa 3">Mesa 3</option>
+                                <option value="Mesa 4">Mesa 4</option>
+                                <option value="Mesa 5">Mesa 5</option>
+                                <option value="Barra Principal">Barra Principal</option>
+                                <option value="Para Llevar / Pick-Up">Para Llevar / Pick-Up</option>
+                                <option value="A Domicilio">A Domicilio 🛵</option>
+                            </select>
+                            <span class="field-icon" id="originStatusIcon" style="right: 28px;"></span>
+                        </div>
+                        <div class="field-feedback" id="originFeedback"></div>
+                    </div>
+
+                    <!-- Real-Time Validated: Delivery Address -->
+                    <div class="form-group" id="groupCustomerAddress" style="display: none;">
+                        <label for="inputCustomerAddress">
+                            <span>Dirección de envío</span>
+                            <span id="addressRequiredBadge" class="required-star">* Obligatorio para entrega</span>
+                        </label>
+                        <div class="input-wrapper">
+                            <input type="text" id="inputCustomerAddress" class="form-input" placeholder="Ej. 4a Calle 5-20, Zona 1, Apto 3B" autocomplete="street-address">
+                            <span class="field-icon" id="addressStatusIcon"></span>
+                        </div>
+                        <div class="field-feedback" id="addressFeedback"></div>
+                    </div>
+
+                    <!-- Push Notification Opt-in Card linked with Phone & FCM -->
+                    <div class="notification-optin-card" id="notificationOptInCard">
+                        <div class="notification-optin-info">
+                            <span>🔔</span>
+                            <div class="notification-optin-text">
+                                <h5 id="notifStatusTitle">Notificaciones Push en Tiempo Real</h5>
+                                <p id="notifStatusSubtitle">Recibe alertas push en tu dispositivo cuando tu pedido pase a <strong>Cocina 👨‍🍳</strong> o vaya <strong>En Camino 🛵</strong>.</p>
+                            </div>
+                        </div>
+                        <button type="button" class="btn-toggle-notif" id="btnToggleNotif" onclick="toggleNotificationPermission()">
+                            Activar Push
+                        </button>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="selectPaymentMethod">
+                            <span>Forma de Pago</span>
+                        </label>
+                        <select id="selectPaymentMethod" class="form-select">
+                            <option value="Efectivo al recibir">Efectivo al recibir</option>
+                            <option value="Tarjeta de Crédito / POS">Tarjeta de Crédito / POS</option>
+                            <option value="Transferencia Bancaria">Transferencia Bancaria</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="inputGeneralNotes">
+                            <span>Instrucciones especiales para cocina (Opcional)</span>
+                        </label>
+                        <input type="text" id="inputGeneralNotes" class="form-input" placeholder="Ej. Servir sin hielo, salsa picante aparte...">
+                    </div>
+
+                    <div class="order-summary-box">
+                        <div class="summary-line">
+                            <span>Subtotal</span>
+                            <span id="summarySubtotal">Q0.00</span>
+                        </div>
+                        <div class="summary-line">
+                            <span>Servicio / Propina voluntaria (10%)</span>
+                            <span id="summaryTip">Q0.00</span>
+                        </div>
+                        <div class="summary-line total">
+                            <span>Total a Pagar</span>
+                            <span id="summaryTotal" style="color: var(--secondary-color);">Q0.00</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- View: Past Order History -->
+            <div id="viewOrderHistory" style="display: none;">
+                <div class="history-list" id="historyItemsList">
+                    <!-- History cards rendered here -->
                 </div>
             </div>
         </div>
@@ -1237,6 +2413,48 @@
             </button>
         </div>
     </div>
+
+    <!-- Ready / Delivered Order Interactive Celebration Banner -->
+    <div class="order-ready-banner" id="orderReadyBanner">
+        <div class="order-ready-content">
+            <div class="order-ready-icon" id="orderReadyIcon">🎉</div>
+            <div style="flex: 1;">
+                <div class="order-ready-title" id="orderReadyTitle">¡Tu Pedido está Listo!</div>
+                <div class="order-ready-desc" id="orderReadyDesc">Tu orden ha sido completada en cocina y está lista para servirse.</div>
+                <button type="button" class="btn-order-ready-dismiss" onclick="dismissOrderReadyBanner()">
+                    ¡Excelente, Gracias!
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Table Occupied / Active Order Verification Modal -->
+    <div class="table-occupied-backdrop" id="tableOccupiedBackdrop" onclick="if(event.target === this) closeTableOccupancyModal()">
+        <div class="table-occupied-card">
+            <div class="table-occupied-icon">⚠️</div>
+            <h3 class="table-occupied-title">Mesa con Pedido Activo</h3>
+            <p class="table-occupied-desc">
+                La <strong id="tableOccupiedNumText">Mesa seleccionada</strong> ya cuenta con una orden activa en cocina.
+            </p>
+            <div class="table-occupied-info-box" id="tableOccupiedOrderDetails">
+                <!-- Injected dynamically -->
+            </div>
+            <p style="font-size: 12px; color: var(--text-muted); margin: 0;">
+                ¿Deseas enviar estos platillos adicionales a la misma cuenta de la mesa, o prefieres seleccionar otra mesa?
+            </p>
+            <div class="table-occupied-actions">
+                <button type="button" class="btn-proceed-additional" id="btnProceedAdditionalComanda">
+                    ➕ Enviar como Comanda Adicional
+                </button>
+                <button type="button" class="btn-change-table" onclick="closeTableOccupancyModal()">
+                    🔄 Cambiar de Mesa
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Celebration Confetti Canvas -->
+    <canvas id="confettiCanvas"></canvas>
 
     <!-- JavaScript Logic & Firebase Integration -->
     <script>
@@ -1432,10 +2650,44 @@
             }
         }
 
+        const CACHED_PRODUCTS_KEY = "restaurante_menu_products_cache";
+        const CACHED_THEME_KEY = "restaurante_theme_cache";
+
+        function loadCachedMenuProducts() {
+            try {
+                const cached = localStorage.getItem(CACHED_PRODUCTS_KEY);
+                if (cached) {
+                    const parsed = JSON.parse(cached);
+                    if (Array.isArray(parsed) && parsed.length > 0) {
+                        menuProducts = parsed;
+                        console.log("Menú cargado desde caché local:", menuProducts.length, "ítems.");
+                    }
+                }
+                const cachedTheme = localStorage.getItem(CACHED_THEME_KEY);
+                if (cachedTheme) {
+                    const parsedTheme = JSON.parse(cachedTheme);
+                    applyTheme(parsedTheme);
+                }
+            } catch (e) {
+                console.warn("Error leyendo menú de caché local:", e);
+            }
+        }
+
+        function saveMenuProductsToCache(products) {
+            try {
+                localStorage.setItem(CACHED_PRODUCTS_KEY, JSON.stringify(products));
+            } catch (e) {
+                console.warn("Error guardando menú en caché local:", e);
+            }
+        }
+
         // --- 4. THEME APPLICATION ---
         function applyTheme(theme) {
             if (!theme) return;
             currentTheme = theme;
+            try {
+                localStorage.setItem(CACHED_THEME_KEY, JSON.stringify(theme));
+            } catch(e){}
 
             // Apply Dynamic CSS Custom Properties
             const root = document.documentElement;
@@ -1484,6 +2736,7 @@
             });
 
             menuProducts = loadedProducts;
+            saveMenuProductsToCache(loadedProducts);
             renderCategories();
             renderProducts();
 
@@ -1640,9 +2893,244 @@
             }).join('');
         }
 
-        // --- 7. WEB SPEECH API & SEARCH CONTROLS ---
+        // --- 7. WEB SPEECH API & PREDICTIVE SEARCH CONTROLS ---
         let speechRecognitionInstance = null;
         let isVoiceListening = false;
+        let selectedPredictiveIndex = -1;
+
+        // Restaurant Operating Hours Configuration: 8:00 AM - 10:30 PM (22:30)
+        const RESTAURANT_OPEN_HOUR = 8;
+        const RESTAURANT_OPEN_MIN = 0;
+        const RESTAURANT_CLOSE_HOUR = 22;
+        const RESTAURANT_CLOSE_MIN = 30;
+
+        function getBusinessScheduleInfo() {
+            const now = new Date();
+            const currentMinutes = now.getHours() * 60 + now.getMinutes();
+            const openMinutes = RESTAURANT_OPEN_HOUR * 60 + RESTAURANT_OPEN_MIN;
+            const closeMinutes = RESTAURANT_CLOSE_HOUR * 60 + RESTAURANT_CLOSE_MIN;
+
+            const isOpen = currentMinutes >= openMinutes && currentMinutes < closeMinutes;
+
+            return {
+                isOpen: isOpen,
+                openTimeFormatted: "8:00 AM",
+                closeTimeFormatted: "10:30 PM",
+                badgeText: isOpen ? "Abierto (Cierra 10:30 PM)" : "Cerrado (Abre 8:00 AM)",
+                alertMessage: isOpen 
+                    ? "El restaurante se encuentra abierto para recibir pedidos a cocina." 
+                    : "Nuestro horario de atención es de 8:00 AM a 10:30 PM. Los pedidos se reanudarán al abrir."
+            };
+        }
+
+        function updateScheduleStatus() {
+            const schedule = getBusinessScheduleInfo();
+            const badge = document.getElementById('scheduleBadge');
+            const badgeText = document.getElementById('scheduleBadgeText');
+            const alertBox = document.getElementById('scheduleAlertBox');
+            const alertMsg = document.getElementById('scheduleAlertMessage');
+            const btnConfirm = document.getElementById('btnConfirmOrder');
+
+            if (badge && badgeText) {
+                badge.className = `schedule-badge ${schedule.isOpen ? 'open' : 'closed'}`;
+                badge.innerHTML = `<span>${schedule.isOpen ? '🟢' : '🔴'}</span> <span>${schedule.badgeText}</span>`;
+            }
+
+            if (alertBox && alertMsg) {
+                alertBox.style.display = schedule.isOpen ? 'none' : 'flex';
+                alertMsg.textContent = schedule.alertMessage;
+            }
+
+            if (btnConfirm) {
+                if (!schedule.isOpen) {
+                    btnConfirm.disabled = true;
+                    btnConfirm.classList.add('disabled-closed');
+                    btnConfirm.innerHTML = `<span>🔒 Restaurante Cerrado (Abre 8:00 AM)</span>`;
+                } else if (cart.length > 0) {
+                    btnConfirm.disabled = false;
+                    btnConfirm.classList.remove('disabled-closed');
+                    btnConfirm.innerHTML = `<span>Confirmar y Enviar Pedido</span> ➔`;
+                }
+            }
+        }
+
+        function initPredictiveSearch() {
+            const searchInput = document.getElementById('searchInput');
+            const btnClear = document.getElementById('btnClearSearch');
+            const dropdown = document.getElementById('predictiveDropdown');
+            const predictiveList = document.getElementById('predictiveList');
+            const predictiveFooter = document.getElementById('predictiveFooter');
+
+            if (!searchInput) return;
+
+            function highlightMatch(text, query) {
+                if (!query) return text;
+                const regex = new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+                return text.replace(regex, '<mark>$1</mark>');
+            }
+
+            function updatePredictiveSuggestions() {
+                const query = searchInput.value.trim().toLowerCase();
+                selectedPredictiveIndex = -1;
+
+                if (query.length === 0) {
+                    dropdown.style.display = 'none';
+                    return;
+                }
+
+                const matches = menuProducts.filter(item => {
+                    if (!item.isVisibleWeb) return false;
+                    const nameMatch = item.name.toLowerCase().includes(query);
+                    const descMatch = item.description && item.description.toLowerCase().includes(query);
+                    const catMatch = item.category && item.category.toLowerCase().includes(query);
+                    return nameMatch || descMatch || catMatch;
+                }).slice(0, 5); // Limit to top 5 matches
+
+                if (matches.length === 0) {
+                    predictiveList.innerHTML = `
+                        <div style="padding: 12px; text-align: center; color: var(--text-muted); font-size: 12px;">
+                            Sin sugerencias directas para "<strong>${searchInput.value}</strong>"
+                        </div>
+                    `;
+                    predictiveFooter.textContent = `Buscar en catálogo por "${searchInput.value}"`;
+                    dropdown.style.display = 'block';
+                    return;
+                }
+
+                document.getElementById('predictiveCount').textContent = `${matches.length} sugerencia${matches.length > 1 ? 's' : ''}`;
+                predictiveFooter.textContent = `Ver todos los resultados para "${searchInput.value}"`;
+
+                predictiveList.innerHTML = matches.map((item, index) => {
+                    const fallbackImg = getCategoryPlaceholder(item.category);
+                    const displayImg = item.imageUrl && item.imageUrl.trim().length > 0 ? item.imageUrl : fallbackImg;
+                    const highlightedName = highlightMatch(item.name, query);
+
+                    return `
+                        <div class="predictive-item" data-index="${index}" onclick="selectPredictiveItem(${item.id})">
+                            <img src="${displayImg}" class="predictive-thumb" alt="${item.name}" onerror="this.src='${fallbackImg}'">
+                            <div class="predictive-info">
+                                <div class="predictive-name">${highlightedName}</div>
+                                <div class="predictive-meta">
+                                    <span class="product-cat-badge" style="font-size: 9px; padding: 1px 5px;">${item.category}</span>
+                                    <span class="predictive-price">Q${Number(item.price).toFixed(2)}</span>
+                                    ${!item.isAvailable ? `<span style="color: #DC2626; font-size: 10px; font-weight: bold;">(Agotado)</span>` : ''}
+                                </div>
+                            </div>
+                            <button type="button" class="predictive-btn-add" ${!item.isAvailable ? 'disabled style="opacity: 0.5;"' : ''} onclick="event.stopPropagation(); addToCart(${item.id});">
+                                ${item.isAvailable ? '+ Agregar' : 'Agotado'}
+                            </button>
+                        </div>
+                    `;
+                }).join('');
+
+                dropdown.style.display = 'block';
+            }
+
+            // Keyboard navigation in predictive search
+            searchInput.addEventListener('keydown', (e) => {
+                const items = dropdown.querySelectorAll('.predictive-item');
+                if (dropdown.style.display !== 'block' || items.length === 0) {
+                    if (e.key === 'Enter') {
+                        dropdown.style.display = 'none';
+                        searchQuery = searchInput.value.trim();
+                        renderProducts();
+                    }
+                    return;
+                }
+
+                if (e.key === 'ArrowDown') {
+                    e.preventDefault();
+                    selectedPredictiveIndex = (selectedPredictiveIndex + 1) % items.length;
+                    items.forEach((it, idx) => it.classList.toggle('selected', idx === selectedPredictiveIndex));
+                } else if (e.key === 'ArrowUp') {
+                    e.preventDefault();
+                    selectedPredictiveIndex = (selectedPredictiveIndex - 1 + items.length) % items.length;
+                    items.forEach((it, idx) => it.classList.toggle('selected', idx === selectedPredictiveIndex));
+                } else if (e.key === 'Enter') {
+                    e.preventDefault();
+                    if (selectedPredictiveIndex >= 0 && items[selectedPredictiveIndex]) {
+                        items[selectedPredictiveIndex].click();
+                    } else {
+                        applyFullSearchFromPredictive();
+                    }
+                } else if (e.key === 'Escape') {
+                    dropdown.style.display = 'none';
+                }
+            });
+
+            // Input typing listener with predictive suggestions
+            searchInput.addEventListener('input', (e) => {
+                searchQuery = e.target.value;
+                btnClear.style.display = searchQuery.length > 0 ? 'flex' : 'none';
+                updatePredictiveSuggestions();
+                renderProducts();
+            });
+
+            searchInput.addEventListener('focus', () => {
+                if (searchInput.value.trim().length > 0) {
+                    updatePredictiveSuggestions();
+                }
+            });
+
+            // Click outside to close dropdown
+            document.addEventListener('click', (e) => {
+                const container = document.getElementById('searchBoxContainer');
+                if (container && !container.contains(e.target)) {
+                    dropdown.style.display = 'none';
+                }
+            });
+
+            // Clear search button
+            btnClear.addEventListener('click', () => {
+                searchInput.value = '';
+                searchQuery = '';
+                btnClear.style.display = 'none';
+                dropdown.style.display = 'none';
+                renderProducts();
+                searchInput.focus();
+            });
+        }
+
+        function selectPredictiveItem(productId) {
+            const item = menuProducts.find(p => p.id === productId);
+            if (!item) return;
+
+            const searchInput = document.getElementById('searchInput');
+            const dropdown = document.getElementById('predictiveDropdown');
+            const btnClear = document.getElementById('btnClearSearch');
+
+            searchInput.value = item.name;
+            searchQuery = item.name;
+            btnClear.style.display = 'flex';
+            dropdown.style.display = 'none';
+
+            renderProducts();
+
+            // Smoothly scroll to the matched product card and highlight it
+            setTimeout(() => {
+                const card = document.getElementById(`product-${productId}`);
+                if (card) {
+                    card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    card.style.transition = "box-shadow 0.3s ease, transform 0.3s ease";
+                    card.style.boxShadow = "0 0 0 3px var(--primary-light), 0 8px 20px rgba(0,0,0,0.15)";
+                    card.style.transform = "scale(1.02)";
+                    setTimeout(() => {
+                        card.style.boxShadow = "";
+                        card.style.transform = "";
+                    }, 1400);
+                }
+            }, 100);
+        }
+
+        function applyFullSearchFromPredictive() {
+            const dropdown = document.getElementById('predictiveDropdown');
+            const searchInput = document.getElementById('searchInput');
+            if (dropdown) dropdown.style.display = 'none';
+            if (searchInput) {
+                searchQuery = searchInput.value.trim();
+                renderProducts();
+            }
+        }
 
         function initVoiceSearch() {
             const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -1652,22 +3140,6 @@
             const voiceText = document.getElementById('voiceListeningText');
             const searchInput = document.getElementById('searchInput');
             const btnClear = document.getElementById('btnClearSearch');
-
-            // Search input typing listener
-            searchInput.addEventListener('input', (e) => {
-                searchQuery = e.target.value;
-                btnClear.style.display = searchQuery.length > 0 ? 'flex' : 'none';
-                renderProducts();
-            });
-
-            // Clear search button
-            btnClear.addEventListener('click', () => {
-                searchInput.value = '';
-                searchQuery = '';
-                btnClear.style.display = 'none';
-                renderProducts();
-                searchInput.focus();
-            });
 
             if (!SpeechRecognition) {
                 btnVoice.addEventListener('click', () => {
@@ -1877,14 +3349,17 @@
             const subtotal = cart.reduce((acc, item) => acc + (item.product.price * item.quantity), 0);
 
             document.getElementById('cartCountBadge').textContent = totalCount;
+            document.getElementById('tabCountCurrent').textContent = totalCount;
             document.getElementById('cartBarItemsSummary').textContent = `${totalCount} ${totalCount === 1 ? 'producto' : 'productos'} seleccionados`;
             document.getElementById('cartBarTotal').textContent = `Q${subtotal.toFixed(2)}`;
+
+            updateOrderHistoryBadge();
+            updateScheduleStatus();
 
             if (totalCount > 0) {
                 showCartBar();
             } else {
                 hideCartBar();
-                closeCartModal();
             }
         }
 
@@ -1896,9 +3371,45 @@
             document.getElementById('cartBar').classList.remove('visible');
         }
 
-        function openCartModal() {
-            if (cart.length === 0) return;
-            renderCartModalItems();
+        // --- 9. MODAL TAB NAVIGATION (CURRENT ORDER vs. ORDER HISTORY) ---
+        let currentModalTab = 'current';
+
+        function switchModalTab(tab) {
+            currentModalTab = tab;
+            const btnCurrent = document.getElementById('tabBtnCurrent');
+            const btnHistory = document.getElementById('tabBtnHistory');
+            const viewCurrent = document.getElementById('viewCurrentOrder');
+            const viewHistory = document.getElementById('viewOrderHistory');
+            const modalFooter = document.getElementById('modalFooter');
+
+            if (tab === 'current') {
+                btnCurrent.classList.add('active');
+                btnHistory.classList.remove('active');
+                viewCurrent.style.display = 'block';
+                viewHistory.style.display = 'none';
+
+                renderCartModalItems();
+                updateScheduleStatus();
+            } else {
+                btnHistory.classList.add('active');
+                btnCurrent.classList.remove('active');
+                viewCurrent.style.display = 'none';
+                viewHistory.style.display = 'block';
+
+                renderOrderHistory();
+
+                // Footer in history tab
+                modalFooter.innerHTML = `
+                    <button class="btn-confirm-order" style="background: var(--surface-color); color: var(--primary-color); border: 1.5px solid var(--border-color); box-shadow: none;" onclick="closeCartModal()">
+                        <span>← Regresar al Menú</span>
+                    </button>
+                `;
+            }
+        }
+
+        function openCartModal(defaultTab = 'current') {
+            loadSavedCustomerInfo();
+            switchModalTab(defaultTab);
             document.getElementById('modalBackdrop').classList.add('open');
             document.getElementById('cartModal').classList.add('open');
         }
@@ -1908,6 +3419,97 @@
             document.getElementById('cartModal').classList.remove('open');
         }
 
+        // Complementary Products Recommender Engine (Bebidas, Postres, Entradas)
+        function getComplementarySuggestions() {
+            if (cart.length === 0) return [];
+
+            const cartProductIds = new Set(cart.map(c => c.product.id));
+            const hasPlatillo = cart.some(c => (c.product.category || "").toLowerCase().includes("platillo"));
+            const hasBebida = cart.some(c => (c.product.category || "").toLowerCase().includes("bebida"));
+            const hasPostre = cart.some(c => (c.product.category || "").toLowerCase().includes("postre"));
+
+            // Select available products not in cart
+            const availableProducts = menuProducts.filter(p => p.isAvailable && p.isVisibleWeb && !cartProductIds.has(p.id));
+
+            let suggestions = [];
+
+            if (hasPlatillo && !hasBebida) {
+                const drinks = availableProducts.filter(p => (p.category || "").toLowerCase().includes("bebida"));
+                suggestions.push(...drinks.slice(0, 2));
+            }
+            if (hasPlatillo && !hasPostre) {
+                const desserts = availableProducts.filter(p => (p.category || "").toLowerCase().includes("postre"));
+                suggestions.push(...desserts.slice(0, 2));
+            }
+
+            // Fallback suggestions: drinks or desserts if empty
+            if (suggestions.length === 0) {
+                const generalComplements = availableProducts.filter(p => {
+                    const c = (p.category || "").toLowerCase();
+                    return c.includes("bebida") || c.includes("postre") || c.includes("entrada");
+                });
+                suggestions.push(...generalComplements.slice(0, 3));
+            }
+
+            return suggestions.slice(0, 3);
+        }
+
+        function renderCrossSellSection() {
+            const container = document.getElementById('crossSellContainer');
+            if (!container) return;
+
+            if (cart.length === 0) {
+                container.style.display = 'none';
+                container.innerHTML = '';
+                return;
+            }
+
+            const suggestions = getComplementarySuggestions();
+            if (suggestions.length === 0) {
+                container.style.display = 'none';
+                container.innerHTML = '';
+                return;
+            }
+
+            container.style.display = 'block';
+            container.innerHTML = `
+                <div class="cross-sell-section">
+                    <div class="cross-sell-header">
+                        <div class="cross-sell-title">
+                            <span>✨ Completa tu Experiencia</span>
+                        </div>
+                        <span class="cross-sell-tag">Sugerencias</span>
+                    </div>
+                    <div class="cross-sell-grid">
+                        ${suggestions.map(s => {
+                            const fallbackImg = getCategoryPlaceholder(s.category);
+                            const displayImg = s.imageUrl && s.imageUrl.trim().length > 0 ? s.imageUrl : fallbackImg;
+                            return `
+                                <div class="cross-sell-card">
+                                    <div>
+                                        <div class="cross-sell-img-row">
+                                            <img src="${displayImg}" class="cross-sell-thumb" alt="${s.name}" onerror="this.src='${fallbackImg}'">
+                                            <div class="cross-sell-info">
+                                                <h5>${s.name}</h5>
+                                                <p>${s.category}</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="cross-sell-footer">
+                                        <span class="cross-sell-price">Q${Number(s.price).toFixed(2)}</span>
+                                        <button type="button" class="btn-add-cross-sell" onclick="addToCart(${s.id})">
+                                            + Agregar
+                                        </button>
+                                    </div>
+                                </div>
+                            `;
+                        }).join('')}
+                    </div>
+                </div>
+            `;
+        }
+
+        // Render Cart Items with smooth Slide-Up Animation
         function renderCartModalItems() {
             const listContainer = document.getElementById('cartItemsList');
             const subtotal = cart.reduce((acc, item) => acc + (item.product.price * item.quantity), 0);
@@ -1915,32 +3517,1155 @@
             const grandTotal = subtotal + tip;
 
             if (cart.length === 0) {
-                listContainer.innerHTML = "<p style='color: var(--text-muted); text-align: center;'>Tu carrito está vacío.</p>";
+                listContainer.innerHTML = `
+                    <div style="text-align: center; padding: 24px 10px; color: var(--text-muted);">
+                        <div style="font-size: 32px; margin-bottom: 6px;">🛒</div>
+                        <p style="font-weight: 700; color: var(--text-main);">Tu carrito está vacío</p>
+                        <p style="font-size: 12px; margin-top: 2px;">Agrega platillos o revisa tu historial de órdenes.</p>
+                    </div>
+                `;
+                document.getElementById('summarySubtotal').textContent = `Q0.00`;
+                document.getElementById('summaryTip').textContent = `Q0.00`;
+                document.getElementById('summaryTotal').textContent = `Q0.00`;
+
+                renderCrossSellSection();
+
+                document.getElementById('modalFooter').innerHTML = `
+                    <button class="btn-confirm-order" style="background: #94A3B8; cursor: not-allowed;" disabled>
+                        <span>Carrito Vacío</span>
+                    </button>
+                `;
                 return;
             }
 
-            listContainer.innerHTML = cart.map(item => `
-                <div class="cart-item-row">
-                    <div class="cart-item-info">
-                        <h4>${item.product.name}</h4>
-                        <p>Q${Number(item.product.price).toFixed(2)} c/u</p>
+            listContainer.innerHTML = cart.map((item, index) => {
+                const itemNotes = item.notes || "";
+                const quickChips = [
+                    { label: "🧅 Sin cebolla", val: "Sin cebolla" },
+                    { label: "🥣 Salsa aparte", val: "Salsa aparte" },
+                    { label: "🌶️ Sin picante", val: "Sin picante" },
+                    { label: "🥩 Término medio", val: "Término medio" },
+                    { label: "🔥 Bien cocido", val: "Bien cocido" },
+                    { label: "🧊 Poco hielo", val: "Poco hielo" },
+                    { label: "🧂 Sin sal", val: "Sin sal" }
+                ];
+
+                return `
+                <div class="cart-item-card" id="itemCard_${index}" style="--item-idx: ${index};">
+                    <div class="cart-item-main-row">
+                        <div class="cart-item-info">
+                            <h4>${item.product.name}</h4>
+                            <p>Q${Number(item.product.price).toFixed(2)} c/u</p>
+                        </div>
+                        <div class="cart-qty-control">
+                            <button class="btn-qty" onclick="updateCartQuantity(${item.product.id}, -1)">−</button>
+                            <span class="qty-val">${item.quantity}</span>
+                            <button class="btn-qty" onclick="updateCartQuantity(${item.product.id}, 1)">+</button>
+                        </div>
                     </div>
-                    <div class="cart-qty-control">
-                        <button class="btn-qty" onclick="updateCartQuantity(${item.product.id}, -1)">−</button>
-                        <span class="qty-val">${item.quantity}</span>
-                        <button class="btn-qty" onclick="updateCartQuantity(${item.product.id}, 1)">+</button>
+
+                    <!-- Item-Specific Special Instructions -->
+                    <div class="cart-item-notes-section">
+                        <div class="cart-item-notes-input-wrapper">
+                            <span class="note-icon">✍️</span>
+                            <input type="text" 
+                                   class="cart-item-notes-input" 
+                                   id="itemNoteInput_${index}"
+                                   value="${escapeHtml(itemNotes)}" 
+                                   placeholder="Instrucciones para cocina (ej. sin cebolla, salsa aparte...)"
+                                   oninput="updateCartItemNotes(${index}, this.value)">
+                            <button type="button" 
+                                    class="btn-clear-item-note" 
+                                    style="${itemNotes ? 'display: inline-block;' : 'display: none;'}"
+                                    onclick="clearCartItemNotes(${index})" 
+                                    title="Borrar notas">✕</button>
+                        </div>
+                        <div class="cart-item-chips-scroll">
+                            ${quickChips.map(qc => {
+                                const isActive = itemNotes.includes(qc.val);
+                                return `
+                                    <button type="button" 
+                                            class="item-quick-chip ${isActive ? 'active' : ''}" 
+                                            data-chip-text="${qc.val}"
+                                            onclick="toggleQuickChipToItem(${index}, '${qc.val}')">
+                                        ${qc.label}
+                                    </button>
+                                `;
+                            }).join('')}
+                        </div>
                     </div>
                 </div>
-            `).join('');
+                `;
+            }).join('');
+
+            renderCrossSellSection();
 
             document.getElementById('summarySubtotal').textContent = `Q${subtotal.toFixed(2)}`;
             document.getElementById('summaryTip').textContent = `Q${tip.toFixed(2)}`;
             document.getElementById('summaryTotal').textContent = `Q${grandTotal.toFixed(2)}`;
+
+            document.getElementById('modalFooter').innerHTML = `
+                <button class="btn-confirm-order" id="btnConfirmOrder" onclick="submitWebOrder()">
+                    <span>Confirmar y Enviar Pedido</span> ➔
+                </button>
+            `;
+
+            updateScheduleStatus();
         }
 
-        // --- 8. SUBMIT WEB ORDER (GUARDA EN FIRESTORE EN 'pedidos_web' CON ESTADO 'Pendiente Validación') ---
-        async function submitWebOrder() {
+        // --- Item Notes Helpers ---
+        function updateCartItemNotes(index, noteVal) {
+            if (cart[index]) {
+                cart[index].notes = noteVal;
+                const card = document.getElementById(`itemCard_${index}`);
+                if (card) {
+                    const clearBtn = card.querySelector('.btn-clear-item-note');
+                    if (clearBtn) {
+                        clearBtn.style.display = noteVal.trim().length > 0 ? 'inline-block' : 'none';
+                    }
+                    const chips = card.querySelectorAll('.item-quick-chip');
+                    chips.forEach(chip => {
+                        const chipVal = chip.getAttribute('data-chip-text');
+                        if (chipVal && noteVal.includes(chipVal)) {
+                            chip.classList.add('active');
+                        } else {
+                            chip.classList.remove('active');
+                        }
+                    });
+                }
+            }
+        }
+
+        function clearCartItemNotes(index) {
+            if (cart[index]) {
+                cart[index].notes = "";
+                const inp = document.getElementById(`itemNoteInput_${index}`);
+                if (inp) inp.value = "";
+                updateCartItemNotes(index, "");
+            }
+        }
+
+        function toggleQuickChipToItem(index, chipText) {
+            if (!cart[index]) return;
+            let current = (cart[index].notes || "").trim();
+            if (current.includes(chipText)) {
+                current = current.replace(chipText, "")
+                                 .replace(/,\s*,/g, ",")
+                                 .replace(/^,\s*|,\s*$/g, "")
+                                 .trim();
+            } else {
+                if (current.length > 0) {
+                    current = `${current}, ${chipText}`;
+                } else {
+                    current = chipText;
+                }
+            }
+            cart[index].notes = current;
+            const inp = document.getElementById(`itemNoteInput_${index}`);
+            if (inp) inp.value = current;
+            updateCartItemNotes(index, current);
+        }
+
+        // --- 10. ORDER HISTORY WITH LOCAL STORAGE PERSISTENCE ---
+        const ORDER_HISTORY_STORAGE_KEY = "restaurante_customer_orders";
+
+        function getStoredOrderHistory() {
+            try {
+                const stored = localStorage.getItem(ORDER_HISTORY_STORAGE_KEY);
+                return stored ? JSON.parse(stored) : [];
+            } catch (e) {
+                console.error("Error reading order history from localStorage:", e);
+                return [];
+            }
+        }
+
+        function saveOrderToHistory(orderDoc) {
+            try {
+                const history = getStoredOrderHistory();
+                history.unshift(orderDoc); // Place most recent on top
+                localStorage.setItem(ORDER_HISTORY_STORAGE_KEY, JSON.stringify(history.slice(0, 30))); // Keep max 30
+                updateOrderHistoryBadge();
+            } catch (e) {
+                console.error("Error saving order to localStorage:", e);
+            }
+        }
+
+        function updateOrderHistoryBadge() {
+            const count = getStoredOrderHistory().length;
+            const badge = document.getElementById('tabCountHistory');
+            if (badge) badge.textContent = count;
+        }
+
+        function renderOrderHistory() {
+            const container = document.getElementById('historyItemsList');
+            const history = getStoredOrderHistory();
+
+            if (history.length === 0) {
+                container.innerHTML = `
+                    <div style="text-align: center; padding: 36px 14px; color: var(--text-muted);">
+                        <div style="font-size: 36px; margin-bottom: 8px;">📜</div>
+                        <h4 style="font-size: 15px; font-weight: 800; color: var(--text-main);">No tienes pedidos anteriores</h4>
+                        <p style="font-size: 12px; margin-top: 4px; line-height: 1.4;">
+                            Los pedidos que realices desde este dispositivo se guardarán aquí para que puedas consultar su estado y repetirlos con un clic.
+                        </p>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = history.map((order, index) => {
+                let items = [];
+                try {
+                    items = typeof order.itemsJson === 'string' ? JSON.parse(order.itemsJson) : (order.items || []);
+                } catch (e) {
+                    items = [];
+                }
+
+                const dateFormatted = order.createdAt 
+                    ? new Date(order.createdAt).toLocaleDateString('es-GT', { 
+                        day: '2-digit', 
+                        month: 'short', 
+                        year: 'numeric',
+                        hour: '2-digit', 
+                        minute: '2-digit' 
+                    }) 
+                    : "Fecha reciente";
+
+                let statusBadgeClass = "pending";
+                let statusText = order.status || "Pendiente Validación";
+                if (statusText.toLowerCase().includes("cocina")) statusBadgeClass = "cooking";
+                else if (statusText.toLowerCase().includes("listo") || statusText.toLowerCase().includes("entregado")) statusBadgeClass = "ready";
+
+                const itemsSummaryRows = items.map(it => `
+                    <div style="margin: 3px 0;">
+                        <div style="display: flex; justify-content: space-between;">
+                            <span>${it.quantity}x ${it.name}</span>
+                            <span>Q${Number(it.subtotal || (it.price * it.quantity)).toFixed(2)}</span>
+                        </div>
+                        ${it.notes ? `<div style="font-size: 11px; color: #64748B; margin-left: 6px;">✍️ <em>${escapeHtml(it.notes)}</em></div>` : ''}
+                    </div>
+                `).join('');
+
+                const orderJsonEscaped = encodeURIComponent(JSON.stringify(items));
+
+                return `
+                    <div class="history-card" style="--item-idx: ${index};">
+                        <div class="history-card-header">
+                            <div>
+                                <span class="history-order-id">#${order.webOrderId || order.id}</span>
+                                <div class="history-order-date">${dateFormatted} • ${order.origin || 'Mesa'}</div>
+                            </div>
+                            <span class="history-status-badge ${statusBadgeClass}">
+                                <span>${statusBadgeClass === 'pending' ? '⏳' : statusBadgeClass === 'cooking' ? '🍳' : '✅'}</span>
+                                <span>${statusText}</span>
+                            </span>
+                        </div>
+
+                        <div class="history-items-summary">
+                            ${itemsSummaryRows}
+                        </div>
+
+                        <div class="history-card-footer">
+                            <div class="history-total">
+                                Total: Q${Number(order.totalAmount || 0).toFixed(2)}
+                            </div>
+                            <div class="history-actions">
+                                <button type="button" class="btn-reorder" onclick="reorderPastItems('${orderJsonEscaped}')">
+                                    🔁 Repetir Pedido
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function reorderPastItems(itemsJsonEscaped) {
+            try {
+                const items = JSON.parse(decodeURIComponent(itemsJsonEscaped));
+                let addedCount = 0;
+
+                items.forEach(it => {
+                    const catalogItem = menuProducts.find(p => p.id === it.id || p.name.toLowerCase() === it.name.toLowerCase());
+                    if (catalogItem && catalogItem.isAvailable) {
+                        const existing = cart.find(c => c.product.id === catalogItem.id && (c.notes || '') === (it.notes || ''));
+                        if (existing) {
+                            existing.quantity += it.quantity;
+                        } else {
+                            cart.push({
+                                product: catalogItem,
+                                quantity: it.quantity,
+                                notes: it.notes || ""
+                            });
+                        }
+                        addedCount += it.quantity;
+                    }
+                });
+
+                if (addedCount > 0) {
+                    updateCartUI();
+                    switchModalTab('current');
+                    showLiveToast(
+                        "🔁 Pedido Replicado",
+                        `Se agregaron <strong>${addedCount} productos</strong> a tu orden activa.`,
+                        "success",
+                        3500
+                    );
+                } else {
+                    showLiveToast(
+                        "⚠️ Platillos no disponibles",
+                        "Los platillos de esta orden anterior no están disponibles actualmente en el menú.",
+                        "warning",
+                        4000
+                    );
+                }
+            } catch (e) {
+                console.error("Error reordering past items:", e);
+            }
+        }
+
+        // --- 11. REAL-TIME FORM VALIDATION & CHECKOUT LOGIC ---
+        let isFormTouched = false;
+
+        function handleOriginChange() {
+            const originSelect = document.getElementById('selectOrigin');
+            const addressGroup = document.getElementById('groupCustomerAddress');
+            const isDelivery = originSelect.value === 'A Domicilio';
+
+            if (addressGroup) {
+                if (isDelivery) {
+                    addressGroup.style.display = 'flex';
+                    addressGroup.style.animation = 'cartItemSlideUp 0.25s ease-out';
+                } else {
+                    addressGroup.style.display = 'none';
+                }
+            }
+            validateCustomerOrigin(true);
+            validateAllFormFields(true);
+        }
+
+        function validateCustomerOrigin(showErrors = true) {
+            const originSelect = document.getElementById('selectOrigin');
+            const feedback = document.getElementById('originFeedback');
+            const icon = document.getElementById('originStatusIcon');
+            if (!originSelect || !feedback) return true;
+
+            const val = (originSelect.value || '').trim();
+
+            if (!val) {
+                if (showErrors && isFormTouched) {
+                    originSelect.classList.remove('is-valid');
+                    originSelect.classList.add('is-invalid');
+                    feedback.className = 'field-feedback error';
+                    feedback.innerHTML = '⚠️ Debes seleccionar una mesa, barra o tipo de entrega.';
+                    if (icon) icon.innerHTML = '❌';
+                } else {
+                    originSelect.classList.remove('is-valid', 'is-invalid');
+                    feedback.className = 'field-feedback';
+                    feedback.innerHTML = '';
+                    if (icon) icon.innerHTML = '';
+                }
+                return false;
+            }
+
+            originSelect.classList.remove('is-invalid');
+            originSelect.classList.add('is-valid');
+            feedback.className = 'field-feedback success';
+
+            if (val === 'A Domicilio') {
+                feedback.innerHTML = '✓ A Domicilio 🛵 (Ingresa la dirección completa abajo)';
+            } else if (val.includes('Para Llevar')) {
+                feedback.innerHTML = '✓ Para Llevar / Pick-Up en mostrador';
+            } else {
+                feedback.innerHTML = `✓ Servicio en sala seleccionado (${val})`;
+            }
+            if (icon) icon.innerHTML = '✅';
+            return true;
+        }
+
+        function validateCustomerName(showErrors = true) {
+            const nameInput = document.getElementById('inputCustomerName');
+            const feedback = document.getElementById('nameFeedback');
+            const icon = document.getElementById('nameStatusIcon');
+            if (!nameInput || !feedback) return false;
+
+            const val = nameInput.value.trim();
+            const isValid = val.length >= 3 && /^[a-zA-ZáéíóúÁÉÍÓÚñÑüÜ\s.'-]+$/.test(val);
+
+            if (val.length === 0) {
+                if (showErrors && isFormTouched) {
+                    nameInput.classList.remove('is-valid');
+                    nameInput.classList.add('is-invalid');
+                    feedback.className = 'field-feedback error';
+                    feedback.innerHTML = '⚠️ El nombre es obligatorio (mínimo 3 letras).';
+                    if (icon) icon.innerHTML = '❌';
+                } else {
+                    nameInput.classList.remove('is-valid', 'is-invalid');
+                    feedback.className = 'field-feedback';
+                    feedback.innerHTML = '';
+                    if (icon) icon.innerHTML = '';
+                }
+                return false;
+            }
+
+            if (isValid) {
+                nameInput.classList.remove('is-invalid');
+                nameInput.classList.add('is-valid');
+                feedback.className = 'field-feedback success';
+                feedback.innerHTML = '✓ Nombre verificado';
+                if (icon) icon.innerHTML = '✅';
+                return true;
+            } else {
+                if (showErrors) {
+                    nameInput.classList.remove('is-valid');
+                    nameInput.classList.add('is-invalid');
+                    feedback.className = 'field-feedback error';
+                    feedback.innerHTML = '⚠️ Ingresa un nombre válido (mínimo 3 letras, solo texto).';
+                    if (icon) icon.innerHTML = '❌';
+                }
+                return false;
+            }
+        }
+
+        function validateCustomerPhone(showErrors = true) {
+            const phoneInput = document.getElementById('inputCustomerPhone');
+            const feedback = document.getElementById('phoneFeedback');
+            const icon = document.getElementById('phoneStatusIcon');
+            if (!phoneInput || !feedback) return false;
+
+            const rawVal = phoneInput.value.trim();
+            const digitsOnly = rawVal.replace(/[^0-9]/g, '');
+            const hasValidFormat = /^[\+]?[(]?[0-9]{1,4}[)]?[-\s\.]?[0-9]{3,4}[-\s\.]?[0-9]{4,6}$/.test(rawVal) || (digitsOnly.length >= 8 && digitsOnly.length <= 15);
+
+            if (rawVal.length === 0) {
+                if (showErrors && isFormTouched) {
+                    phoneInput.classList.remove('is-valid');
+                    phoneInput.classList.add('is-invalid');
+                    feedback.className = 'field-feedback error';
+                    feedback.innerHTML = '⚠️ El número de teléfono es obligatorio.';
+                    if (icon) icon.innerHTML = '❌';
+                } else {
+                    phoneInput.classList.remove('is-valid', 'is-invalid');
+                    feedback.className = 'field-feedback';
+                    feedback.innerHTML = '';
+                    if (icon) icon.innerHTML = '';
+                }
+                return false;
+            }
+
+            if (digitsOnly.length >= 8 && digitsOnly.length <= 15 && hasValidFormat) {
+                phoneInput.classList.remove('is-invalid');
+                phoneInput.classList.add('is-valid');
+                feedback.className = 'field-feedback success';
+                feedback.innerHTML = '✓ Teléfono verificado (' + digitsOnly.length + ' dígitos)';
+                if (icon) icon.innerHTML = '✅';
+                return true;
+            } else {
+                if (showErrors) {
+                    phoneInput.classList.remove('is-valid');
+                    phoneInput.classList.add('is-invalid');
+                    feedback.className = 'field-feedback error';
+                    feedback.innerHTML = '⚠️ Ingresa de 8 a 15 dígitos numéricos (Ej. 5555-1234).';
+                    if (icon) icon.innerHTML = '❌';
+                }
+                return false;
+            }
+        }
+
+        function validateCustomerAddress(showErrors = true) {
+            const origin = document.getElementById('selectOrigin')?.value;
+            const addressInput = document.getElementById('inputCustomerAddress');
+            const feedback = document.getElementById('addressFeedback');
+            const icon = document.getElementById('addressStatusIcon');
+            if (!addressInput || !feedback) return true;
+
+            const isDelivery = origin === 'A Domicilio';
+            const val = addressInput.value.trim();
+
+            if (!isDelivery) {
+                addressInput.classList.remove('is-invalid');
+                if (val.length > 0) {
+                    addressInput.classList.add('is-valid');
+                    feedback.className = 'field-feedback success';
+                    feedback.innerHTML = '✓ Referencia agregada';
+                } else {
+                    addressInput.classList.remove('is-valid');
+                    feedback.className = 'field-feedback';
+                    feedback.innerHTML = '';
+                }
+                if (icon) icon.innerHTML = '';
+                return true;
+            }
+
+            // If delivery, address is strictly required (min 6 chars)
+            if (val.length >= 6) {
+                addressInput.classList.remove('is-invalid');
+                addressInput.classList.add('is-valid');
+                feedback.className = 'field-feedback success';
+                feedback.innerHTML = '✓ Dirección de entrega completa';
+                if (icon) icon.innerHTML = '✅';
+                return true;
+            } else {
+                if (showErrors) {
+                    addressInput.classList.remove('is-valid');
+                    addressInput.classList.add('is-invalid');
+                    feedback.className = 'field-feedback error';
+                    feedback.innerHTML = '⚠️ Ingresa la dirección completa con calle/zona (mínimo 6 caracteres).';
+                    if (icon) icon.innerHTML = '❌';
+                }
+                return false;
+            }
+        }
+
+        function validateAllFormFields(showErrors = false) {
+            const isOriginValid = validateCustomerOrigin(showErrors);
+            const isNameValid = validateCustomerName(showErrors);
+            const isPhoneValid = validateCustomerPhone(showErrors);
+            const isAddressValid = validateCustomerAddress(showErrors);
+
+            const btnConfirm = document.getElementById('btnConfirmOrder');
+            const schedule = getBusinessScheduleInfo();
+
+            const isAllValid = isOriginValid && isNameValid && isPhoneValid && isAddressValid;
+
+            if (btnConfirm && schedule.isOpen) {
+                if (isAllValid && cart.length > 0) {
+                    btnConfirm.disabled = false;
+                    btnConfirm.style.opacity = '1';
+                    btnConfirm.style.cursor = 'pointer';
+                }
+            }
+
+            return isAllValid;
+        }
+
+        function initFormValidationListeners() {
+            const nameInput = document.getElementById('inputCustomerName');
+            const phoneInput = document.getElementById('inputCustomerPhone');
+            const originSelect = document.getElementById('selectOrigin');
+            const addressInput = document.getElementById('inputCustomerAddress');
+
+            [nameInput, phoneInput, addressInput].forEach(inp => {
+                if (!inp) return;
+                inp.addEventListener('input', () => {
+                    isFormTouched = true;
+                    validateAllFormFields(true);
+                });
+                inp.addEventListener('blur', () => {
+                    isFormTouched = true;
+                    validateAllFormFields(true);
+                });
+            });
+
+            if (originSelect) {
+                originSelect.addEventListener('change', () => {
+                    isFormTouched = true;
+                    handleOriginChange();
+                });
+            }
+        }
+
+        // --- 12. FIREBASE CLOUD MESSAGING & CLIENT NOTIFICATIONS ---
+        let clientFcmToken = null;
+        let fcmMessagingInstance = null;
+        let activeOrdersTrackingUnsub = null;
+        let notifiedStatusTransitions = new Set();
+
+        function initClientFCM() {
+            try {
+                if (typeof firebase !== 'undefined' && firebase.messaging && firebase.messaging.isSupported()) {
+                    fcmMessagingInstance = firebase.messaging();
+                    
+                    // Register Background Service Worker
+                    if ('serviceWorker' in navigator) {
+                        navigator.serviceWorker.register('firebase-messaging-sw.js').then((registration) => {
+                            if (fcmMessagingInstance.useServiceWorker) {
+                                fcmMessagingInstance.useServiceWorker(registration);
+                            }
+                            console.log("FCM Service Worker registrado exitosamente.");
+                        }).catch(swErr => {
+                            console.warn("FCM Service Worker fallback:", swErr);
+                        });
+                    }
+
+                    // Foreground FCM Message Listener
+                    fcmMessagingInstance.onMessage((payload) => {
+                        console.log("FCM Notificación en primer plano recibida:", payload);
+                        const title = payload.notification?.title || payload.data?.title || "🍽️ Actualización de tu Pedido";
+                        const body = payload.notification?.body || payload.data?.body || "El estado de tu orden ha cambiado.";
+                        const orderId = payload.data?.orderId || "pedido";
+                        const status = payload.data?.status || "Listo";
+
+                        showOrderStatusCelebration(orderId, status, body);
+                    });
+                }
+            } catch (e) {
+                console.warn("FCM no disponible en este entorno:", e);
+            }
+
+            // Check if notification permission was previously granted
+            updateNotifButtonUI();
+        }
+
+        async function toggleNotificationPermission() {
+            const btn = document.getElementById('btnToggleNotif');
+            if (!('Notification' in window)) {
+                showLiveToast("Aviso", "Tu navegador no soporta notificaciones push nativas.", "info", 4000);
+                return;
+            }
+
+            try {
+                const permission = await Notification.requestPermission();
+                if (permission === 'granted') {
+                    showLiveToast("🔔 Push Activadas", "Recibirás alertas inmediatas cuando tu orden pase a Cocina o vaya En Camino.", "success", 4500);
+                    
+                    if (fcmMessagingInstance) {
+                        try {
+                            clientFcmToken = await fcmMessagingInstance.getToken({
+                                vapidKey: "BEl62iUYgUivxIkv69yViEuiBIa-Ib9-SkvMeAtA3LFgDzkrxZ_WJJ5_mock_vapid_key"
+                            });
+                            console.log("FCM Token del cliente obtenido:", clientFcmToken);
+                            localStorage.setItem('fcm_client_token', clientFcmToken);
+                        } catch (tokErr) {
+                            console.log("Token FCM fallback local:", tokErr.message);
+                            clientFcmToken = "fcm-client-mock-" + Date.now();
+                        }
+                    }
+                    updateNotifButtonUI();
+                } else {
+                    showLiveToast("Notificaciones Bloqueadas", "Puedes activarlas desde la configuración de tu navegador.", "warning", 4000);
+                    updateNotifButtonUI();
+                }
+            } catch (err) {
+                console.warn("Error solicitando permisos de notificación:", err);
+            }
+        }
+
+        function updateNotifButtonUI() {
+            const btn = document.getElementById('btnToggleNotif');
+            const title = document.getElementById('notifStatusTitle');
+            const subtitle = document.getElementById('notifStatusSubtitle');
+            if (!btn) return;
+
+            if ('Notification' in window && Notification.permission === 'granted') {
+                btn.className = 'btn-toggle-notif active';
+                btn.innerHTML = '✓ Activas';
+                if (title) title.innerText = '🔔 Notificaciones Push Activas';
+                if (subtitle) subtitle.innerText = 'Te avisaremos con sonido y alerta en segundo plano cuando cambie a Cocina, En Camino o Listo.';
+            } else {
+                btn.className = 'btn-toggle-notif';
+                btn.innerHTML = 'Activar Push';
+                if (title) title.innerText = 'Notificaciones Push en Tiempo Real';
+                if (subtitle) subtitle.innerText = 'Recibe alertas push en tu dispositivo cuando tu pedido pase a Cocina 👨‍🍳 o vaya En Camino 🛵.';
+            }
+        }
+
+        // Web Audio API Status Chime Synthesis (Cocina, Camino, Listo, Entregado)
+        function playOrderStatusAudioChime(statusType = 'listo') {
+            try {
+                const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+                if (!AudioContextClass) return;
+                const audioCtx = new AudioContextClass();
+                const now = audioCtx.currentTime;
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+
+                const type = (statusType || '').toLowerCase();
+
+                if (type.includes('cocina') || type.includes('preparaci')) {
+                    // Double medium blip for kitchen start: E5 -> G#5
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(659.25, now);
+                    osc.frequency.setValueAtTime(830.61, now + 0.15);
+
+                    gain.gain.setValueAtTime(0, now);
+                    gain.gain.linearRampToValueAtTime(0.25, now + 0.04);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.6);
+
+                    osc.start(now);
+                    osc.stop(now + 0.65);
+                } else if (type.includes('camino') || type.includes('ruta') || type.includes('repartidor')) {
+                    // Upward dynamic transit chime: F5 -> A5 -> C6
+                    osc.type = 'triangle';
+                    osc.frequency.setValueAtTime(698.46, now);
+                    osc.frequency.setValueAtTime(880.00, now + 0.12);
+                    osc.frequency.setValueAtTime(1046.50, now + 0.24);
+
+                    gain.gain.setValueAtTime(0, now);
+                    gain.gain.linearRampToValueAtTime(0.25, now + 0.03);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.75);
+
+                    osc.start(now);
+                    osc.stop(now + 0.8);
+                } else if (type.includes('entregado') || type.includes('completado')) {
+                    // Warm gentle chime: G5 -> C6
+                    osc.type = 'triangle';
+                    osc.frequency.setValueAtTime(783.99, now);
+                    osc.frequency.setValueAtTime(1046.50, now + 0.15);
+
+                    gain.gain.setValueAtTime(0, now);
+                    gain.gain.linearRampToValueAtTime(0.25, now + 0.04);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.7);
+
+                    osc.start(now);
+                    osc.stop(now + 0.75);
+                } else {
+                    // Fanfare triad for ready: D5 -> F#5 -> A5 -> D6
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(587.33, now);
+                    osc.frequency.setValueAtTime(739.99, now + 0.12);
+                    osc.frequency.setValueAtTime(880.00, now + 0.24);
+                    osc.frequency.setValueAtTime(1174.66, now + 0.36);
+
+                    gain.gain.setValueAtTime(0, now);
+                    gain.gain.linearRampToValueAtTime(0.3, now + 0.05);
+                    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.9);
+
+                    osc.start(now);
+                    osc.stop(now + 0.95);
+                }
+            } catch (e) {
+                console.log("Audio chime playback:", e);
+            }
+        }
+
+        function showOrderStatusCelebration(orderId, statusText, customDesc = null) {
+            const banner = document.getElementById('orderReadyBanner');
+            const titleEl = document.getElementById('orderReadyTitle');
+            const descEl = document.getElementById('orderReadyDesc');
+            const iconEl = document.getElementById('orderReadyIcon');
+
+            const sLower = (statusText || '').toLowerCase();
+            let title = `🍽️ Actualización de Pedido #${orderId}`;
+            let desc = customDesc || `Tu pedido ha cambiado de estado a ${statusText}.`;
+            let icon = "🍽️";
+
+            if (sLower.includes('cocina') || sLower.includes('preparaci')) {
+                title = `👨‍🍳 ¡Pedido #${orderId} en Cocina!`;
+                desc = customDesc || `Tu orden ha sido aceptada y nuestro chef ya está preparando tus platillos recién hechos.`;
+                icon = "👨‍🍳";
+            } else if (sLower.includes('camino') || sLower.includes('ruta') || sLower.includes('repartidor')) {
+                title = `🛵 ¡Pedido #${orderId} en Camino!`;
+                desc = customDesc || `Tu comida está empaquetada y el repartidor va en ruta hacia tu dirección.`;
+                icon = "🛵";
+            } else if (sLower.includes('listo') || sLower.includes('servir')) {
+                title = `🎉 ¡Tu Pedido #${orderId} está LISTO!`;
+                desc = customDesc || `Tu comida recién preparada está lista para ser retirada o servida en tu mesa. ¡Buen provecho!`;
+                icon = "🍽️";
+            } else if (sLower.includes('entregado') || sLower.includes('completado')) {
+                title = `🎁 ¡Pedido #${orderId} Entregado!`;
+                desc = customDesc || `Tu orden ha sido entregada con éxito. ¡Muchas gracias por tu preferencia y buen provecho!`;
+                icon = "🎁";
+            }
+
+            if (titleEl) titleEl.innerText = title;
+            if (descEl) descEl.innerText = desc;
+            if (iconEl) iconEl.innerText = icon;
+
+            if (banner) {
+                banner.classList.add('show');
+            }
+
+            // Audio Alert
+            playOrderStatusAudioChime(sLower);
+
+            // Native Browser Push Notification
+            if ('Notification' in window && Notification.permission === 'granted') {
+                try {
+                    new Notification(title, {
+                        body: desc,
+                        icon: "images/cat_fuertes.jpg"
+                    });
+                } catch(nErr) {
+                    console.log("Notification trigger:", nErr);
+                }
+            }
+        }
+
+        function dismissOrderReadyBanner() {
+            const banner = document.getElementById('orderReadyBanner');
+            if (banner) {
+                banner.classList.remove('show');
+            }
+        }
+
+        // Live Real-Time Multi-Order Status Monitoring for Customers
+        function setupCustomerOrdersListener() {
+            if (!db) return;
+
+            try {
+                // Subscribe to updates in Firestore for web orders
+                if (activeOrdersTrackingUnsub) {
+                    activeOrdersTrackingUnsub();
+                }
+
+                activeOrdersTrackingUnsub = db.collection("pedidos_web")
+                    .orderBy("createdAt", "desc")
+                    .limit(20)
+                    .onSnapshot((snapshot) => {
+                        const localOrders = getOrderHistory();
+                        if (localOrders.length === 0) return;
+
+                        const localOrderIds = new Set(localOrders.map(o => String(o.webOrderId || o.id)));
+
+                        snapshot.docChanges().forEach((change) => {
+                            const data = change.doc.data();
+                            const docOrderId = String(data.webOrderId || change.doc.id);
+
+                            if (localOrderIds.has(docOrderId)) {
+                                const currentStatus = data.status || "Pendiente";
+                                const transitionKey = `${docOrderId}_${currentStatus}`;
+
+                                // Update local storage representation
+                                const updatedLocalOrders = localOrders.map(o => {
+                                    if (String(o.webOrderId || o.id) === docOrderId) {
+                                        return { ...o, status: currentStatus };
+                                    }
+                                    return o;
+                                });
+                                localStorage.setItem('restaurante_customer_orders', JSON.stringify(updatedLocalOrders));
+                                renderOrderHistoryList();
+
+                                // Check status transitions: Cocina, En Camino, Listo, Entregado
+                                const statusLower = currentStatus.toLowerCase();
+                                const isSignificant = statusLower.includes("cocina") || 
+                                                      statusLower.includes("preparaci") || 
+                                                      statusLower.includes("camino") || 
+                                                      statusLower.includes("ruta") || 
+                                                      statusLower.includes("listo") || 
+                                                      statusLower.includes("entregado");
+
+                                if (isSignificant && !notifiedStatusTransitions.has(transitionKey)) {
+                                    notifiedStatusTransitions.add(transitionKey);
+                                    showOrderStatusCelebration(docOrderId, currentStatus);
+                                }
+                            }
+                        });
+                    }, (err) => {
+                        console.warn("Error en tracking en tiempo real de pedidos:", err);
+                    });
+            } catch (e) {
+                console.warn("FCM Customer live order tracking error:", e);
+            }
+        }
+
+        // --- 13. CUSTOMER AUTOFILL, CONFETTI, REAL-TIME TABLE CHECK & ORDER CHECKOUT ---
+
+        // Customer Info Auto-Fill Persistence (localStorage)
+        function loadSavedCustomerInfo() {
+            try {
+                const savedName = localStorage.getItem('restaurante_customer_name');
+                const savedPhone = localStorage.getItem('restaurante_customer_phone');
+                const savedAddress = localStorage.getItem('restaurante_customer_address');
+
+                const nameInput = document.getElementById('inputCustomerName');
+                const phoneInput = document.getElementById('inputCustomerPhone');
+                const addressInput = document.getElementById('inputCustomerAddress');
+                const badge = document.getElementById('autofillBadge');
+
+                let wasAutofilled = false;
+
+                if (nameInput && savedName && (!nameInput.value || nameInput.value.trim().length === 0)) {
+                    nameInput.value = savedName;
+                    wasAutofilled = true;
+                }
+                if (phoneInput && savedPhone && (!phoneInput.value || phoneInput.value.trim().length === 0)) {
+                    phoneInput.value = savedPhone;
+                    wasAutofilled = true;
+                }
+                if (addressInput && savedAddress && (!addressInput.value || addressInput.value.trim().length === 0)) {
+                    addressInput.value = savedAddress;
+                }
+
+                if (badge) {
+                    badge.style.display = wasAutofilled ? 'inline-flex' : 'none';
+                }
+
+                if (wasAutofilled) {
+                    validateAllFormFields(false);
+                }
+            } catch (e) {
+                console.warn("Error cargando datos de cliente guardados:", e);
+            }
+        }
+
+        function saveCustomerInfoToStorage(name, phone, address) {
+            try {
+                if (name && name.trim().length >= 3) {
+                    localStorage.setItem('restaurante_customer_name', name.trim());
+                }
+                if (phone && phone.trim().length >= 8) {
+                    localStorage.setItem('restaurante_customer_phone', phone.trim());
+                }
+                if (address && address.trim().length >= 6) {
+                    localStorage.setItem('restaurante_customer_address', address.trim());
+                }
+            } catch (e) {
+                console.warn("Error persistiendo datos de cliente:", e);
+            }
+        }
+
+        // --- Celebration Confetti Canvas & Confirmation Bubble Physics ---
+        let confettiAnimationId = null;
+
+        function launchConfettiBurst() {
+            const canvas = document.getElementById('confettiCanvas');
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
+            if (!ctx) return;
+
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            canvas.style.display = 'block';
+
+            if (confettiAnimationId) {
+                cancelAnimationFrame(confettiAnimationId);
+            }
+
+            const colors = ['#0D9488', '#14B8A6', '#F97316', '#FB923C', '#F59E0B', '#10B981', '#6366F1', '#EC4899', '#3B82F6'];
+            const particleCount = 140;
+            const particles = [];
+
+            for (let i = 0; i < particleCount; i++) {
+                const side = i % 2 === 0 ? -1 : 1;
+                const originX = side === -1 ? window.innerWidth * 0.2 : window.innerWidth * 0.8;
+                const originY = window.innerHeight * 0.65;
+
+                particles.push({
+                    x: originX,
+                    y: originY,
+                    vx: (Math.random() * 8 + 3) * (side === -1 ? 1 : -1) + (Math.random() - 0.5) * 6,
+                    vy: -(Math.random() * 14 + 9),
+                    size: Math.random() * 8 + 5,
+                    color: colors[Math.floor(Math.random() * colors.length)],
+                    rotation: Math.random() * 360,
+                    rotationSpeed: (Math.random() - 0.5) * 12,
+                    gravity: 0.38,
+                    drag: 0.975,
+                    shape: Math.random() > 0.4 ? 'rect' : 'circle',
+                    opacity: 1,
+                    fadeSpeed: Math.random() * 0.005 + 0.007
+                });
+            }
+
+            const startTime = Date.now();
+            const duration = 2700;
+
+            function renderConfetti() {
+                const elapsed = Date.now() - startTime;
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+                let activeCount = 0;
+                particles.forEach(p => {
+                    if (p.opacity > 0) {
+                        p.x += p.vx;
+                        p.y += p.vy;
+                        p.vy += p.gravity;
+                        p.vx *= p.drag;
+                        p.rotation += p.rotationSpeed;
+                        p.opacity -= p.fadeSpeed;
+
+                        if (p.opacity > 0) {
+                            activeCount++;
+                            ctx.save();
+                            ctx.translate(p.x, p.y);
+                            ctx.rotate((p.rotation * Math.PI) / 180);
+                            ctx.globalAlpha = Math.max(0, p.opacity);
+                            ctx.fillStyle = p.color;
+
+                            if (p.shape === 'rect') {
+                                ctx.fillRect(-p.size / 2, -p.size / 4, p.size, p.size / 2);
+                            } else {
+                                ctx.beginPath();
+                                ctx.arc(0, 0, p.size / 2, 0, Math.PI * 2);
+                                ctx.fill();
+                            }
+                            ctx.restore();
+                        }
+                    }
+                });
+
+                if (activeCount > 0 && elapsed < duration) {
+                    confettiAnimationId = requestAnimationFrame(renderConfetti);
+                } else {
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                    canvas.style.display = 'none';
+                }
+            }
+
+            renderConfetti();
+        }
+
+        function launchConfirmationBubbles(originX, originY) {
+            const emojis = ['🎉', '✨', '🍽️', '🔥', '🛵', '⭐', '💫', '👍', '😋'];
+            const count = 10;
+
+            for (let i = 0; i < count; i++) {
+                const bubble = document.createElement('div');
+                bubble.className = 'confirm-bubble';
+                bubble.textContent = emojis[i % emojis.length];
+
+                const angle = (Math.PI * 2 / count) * i + (Math.random() - 0.5) * 0.6;
+                const distance = Math.random() * 75 + 50;
+                const targetX = Math.cos(angle) * distance;
+                const targetY = Math.sin(angle) * distance - 40;
+
+                bubble.style.left = `${originX || (window.innerWidth / 2)}px`;
+                bubble.style.top = `${originY || (window.innerHeight / 2)}px`;
+                bubble.style.setProperty('--bx', `${targetX}px`);
+                bubble.style.setProperty('--by', `${targetY}px`);
+
+                document.body.appendChild(bubble);
+
+                setTimeout(() => {
+                    if (bubble.parentNode) {
+                        bubble.parentNode.removeChild(bubble);
+                    }
+                }, 1000);
+            }
+        }
+
+        // --- Real-Time Firestore Table Active Order Checker ---
+        let activeTableProceedCallback = null;
+
+        async function checkTableHasActiveOrder(tableOrigin) {
+            if (!tableOrigin || tableOrigin.includes("Para Llevar") || tableOrigin.includes("A Domicilio")) {
+                return null;
+            }
+
+            try {
+                if (db) {
+                    // 1. Check in pedidos_web
+                    const snapshotWeb = await db.collection("pedidos_web")
+                        .where("origin", "==", tableOrigin)
+                        .get();
+
+                    for (const doc of snapshotWeb.docs) {
+                        const data = doc.data();
+                        const status = (data.status || "").toLowerCase();
+                        if (status.includes("pendiente") || status.includes("cocina") || status.includes("preparaci")) {
+                            return {
+                                source: "pedidos_web",
+                                orderId: data.webOrderId || doc.id,
+                                status: data.status || "Pendiente Validación",
+                                customerName: data.customerName || "Cliente",
+                                totalAmount: data.totalAmount || 0,
+                                createdAt: data.createdAt || null
+                            };
+                        }
+                    }
+
+                    // 2. Check in native POS table orders
+                    const snapshotNative = await db.collection("pedidos")
+                        .where("tableNumber", "==", tableOrigin)
+                        .get();
+
+                    for (const doc of snapshotNative.docs) {
+                        const data = doc.data();
+                        const status = (data.status || "").toLowerCase();
+                        if (status.includes("pendiente") || status.includes("cocina") || status.includes("preparaci")) {
+                            return {
+                                source: "pedidos",
+                                orderId: data.id || doc.id,
+                                status: data.status || "En Cocina",
+                                customerName: data.customerName || "Mesa Activa",
+                                totalAmount: data.totalAmount || 0,
+                                createdAt: data.createdAt || null
+                            };
+                        }
+                    }
+                } else {
+                    // Local Storage fallback check
+                    const localOrders = JSON.parse(localStorage.getItem('pedidos_web_cache') || '[]');
+                    const found = localOrders.find(o => o.origin === tableOrigin && !['Entregado', 'Cancelado', 'Pagado'].includes(o.status));
+                    if (found) {
+                        return {
+                            source: "local",
+                            orderId: found.webOrderId || found.id,
+                            status: found.status || "Pendiente",
+                            customerName: found.customerName || "Cliente",
+                            totalAmount: found.totalAmount || 0
+                        };
+                    }
+                }
+            } catch (err) {
+                console.warn("Error verificando ocupación de mesa en tiempo real:", err);
+            }
+            return null;
+        }
+
+        function showTableOccupancyAlertModal(tableOrigin, orderInfo, onProceedAsAdditional) {
+            const backdrop = document.getElementById('tableOccupiedBackdrop');
+            const numText = document.getElementById('tableOccupiedNumText');
+            const detailsBox = document.getElementById('tableOccupiedOrderDetails');
+            const btnProceed = document.getElementById('btnProceedAdditionalComanda');
+
+            if (numText) numText.textContent = tableOrigin;
+            if (detailsBox) {
+                detailsBox.innerHTML = `
+                    <div><strong>Orden Activa:</strong> #${orderInfo.orderId}</div>
+                    <div><strong>Estado:</strong> ${orderInfo.status}</div>
+                    <div><strong>Cliente:</strong> ${escapeHtml(orderInfo.customerName || 'Mesa')}</div>
+                    <div><strong>Monto actual:</strong> Q${Number(orderInfo.totalAmount || 0).toFixed(2)}</div>
+                `;
+            }
+
+            activeTableProceedCallback = onProceedAsAdditional;
+
+            if (btnProceed) {
+                btnProceed.onclick = () => {
+                    closeTableOccupancyModal();
+                    if (activeTableProceedCallback) {
+                        activeTableProceedCallback();
+                    }
+                };
+            }
+
+            if (backdrop) {
+                backdrop.classList.add('open');
+            }
+        }
+
+        function closeTableOccupancyModal() {
+            const backdrop = document.getElementById('tableOccupiedBackdrop');
+            if (backdrop) {
+                backdrop.classList.remove('open');
+            }
+            activeTableProceedCallback = null;
+        }
+
+        // --- SUBMIT WEB ORDER ---
+        async function submitWebOrder(isConfirmedAdditional = false) {
             if (cart.length === 0) return;
+
+            isFormTouched = true;
+            const isValid = validateAllFormFields(true);
+
+            if (!isValid) {
+                showLiveToast(
+                    "⚠️ Datos Incompletos",
+                    "Por favor revisa los campos en rojo antes de confirmar el pedido.",
+                    "error",
+                    4000
+                );
+                return;
+            }
+
+            // Strict Business Hours Check
+            const schedule = getBusinessScheduleInfo();
+            if (!schedule.isOpen) {
+                showLiveToast(
+                    "🔴 Restaurante Cerrado",
+                    `Lo sentimos, nuestro horario de atención es de ${schedule.openTimeFormatted} a ${schedule.closeTimeFormatted}. No se pueden enviar pedidos en este momento.`,
+                    "error",
+                    6000
+                );
+                updateScheduleStatus();
+                return;
+            }
 
             // Strict Safety Check: Verify that no item in the cart is marked as Agotado in the live menu catalog
             const unavailableItems = cart.filter(c => {
@@ -1969,23 +4694,42 @@
                 return;
             }
 
-            const customerName = document.getElementById('inputCustomerName').value.trim() || "Cliente Web";
-            const customerPhone = document.getElementById('inputCustomerPhone').value.trim();
             const origin = document.getElementById('selectOrigin').value;
+
+            // Real-Time Table In-Use Check (Mesa 1-5, Barra)
+            if (!isConfirmedAdditional && origin && !origin.includes("Para Llevar") && !origin.includes("A Domicilio")) {
+                const activeOrderOnTable = await checkTableHasActiveOrder(origin);
+                if (activeOrderOnTable) {
+                    showTableOccupancyAlertModal(origin, activeOrderOnTable, () => {
+                        submitWebOrder(true);
+                    });
+                    return;
+                }
+            }
+
+            const customerName = document.getElementById('inputCustomerName').value.trim();
+            const customerPhone = document.getElementById('inputCustomerPhone').value.trim();
+            const customerAddress = document.getElementById('inputCustomerAddress')?.value.trim() || "";
             const paymentMethod = document.getElementById('selectPaymentMethod').value;
-            const notes = document.getElementById('inputGeneralNotes').value.trim();
+            let notes = document.getElementById('inputGeneralNotes').value.trim();
+
+            if (isConfirmedAdditional) {
+                notes = notes ? `[Comanda Adicional] ${notes}` : `[Comanda Adicional]`;
+            }
 
             const subtotal = cart.reduce((acc, item) => acc + (item.product.price * item.quantity), 0);
             const tip = subtotal * 0.10;
             const grandTotal = subtotal + tip;
 
+            // Map cart items including individual item instructions
             const orderItemsPayload = cart.map(c => ({
                 id: c.product.id,
                 name: c.product.name,
                 category: c.product.category,
                 price: c.product.price,
                 quantity: c.quantity,
-                subtotal: c.product.price * c.quantity
+                subtotal: c.product.price * c.quantity,
+                notes: (c.notes || "").trim()
             }));
 
             const randomCode = Math.floor(1000 + Math.random() * 9000);
@@ -1999,15 +4743,19 @@
                 tableNumber: origin,
                 customerName: customerName,
                 customerPhone: customerPhone,
+                deliveryAddress: customerAddress,
+                fcmToken: clientFcmToken || localStorage.getItem('fcm_client_token') || null,
                 itemsJson: JSON.stringify(orderItemsPayload),
                 totalAmount: grandTotal,
                 status: "Pendiente Validación",
                 paymentMethod: paymentMethod,
                 notes: notes,
+                isAdditional: isConfirmedAdditional,
                 createdAt: timestamp
             };
 
             const btnConfirm = document.getElementById('btnConfirmOrder');
+            const btnRect = btnConfirm.getBoundingClientRect();
             btnConfirm.disabled = true;
             btnConfirm.innerHTML = `<span>Enviando Pedido...</span>`;
 
@@ -2022,8 +4770,22 @@
                     localStorage.setItem('pedidos_web_cache', JSON.stringify(saved));
                 }
 
-                // Show Success Screen inside modal
-                showOrderSuccessScreen(webOrderId, customerName, origin, grandTotal, orderItemsPayload, paymentMethod);
+                // 1. Save customer details to localStorage for future auto-fill
+                saveCustomerInfoToStorage(customerName, customerPhone, customerAddress);
+
+                // 2. Save into customer's local order history
+                saveOrderToHistory(webOrderDocument);
+
+                // 3. Start real-time status listener for this newly placed order
+                setupCustomerOrdersListener();
+
+                // 4. Trigger celebration effects: Confetti burst & Confirmation bubbles
+                launchConfettiBurst();
+                launchConfirmationBubbles(btnRect.left + btnRect.width / 2, btnRect.top + btnRect.height / 2);
+                playOrderStatusAudioChime('listo');
+
+                // 5. Show Success Screen inside modal
+                showOrderSuccessScreen(webOrderId, customerName, origin, customerAddress, grandTotal, orderItemsPayload, paymentMethod, notes);
                 cart = []; // Clear Cart
                 updateCartUI();
 
@@ -2035,13 +4797,30 @@
             }
         }
 
-        function showOrderSuccessScreen(orderId, name, table, total, items, paymentMethod) {
+        function showOrderSuccessScreen(orderId, name, table, address, total, items, paymentMethod, generalNotes) {
             const modalBody = document.getElementById('modalBody');
             const modalFooter = document.getElementById('modalFooter');
 
-            const itemsSummaryText = items.map(i => `• ${i.quantity}x ${i.name} (Q${i.subtotal.toFixed(2)})`).join('%0A');
-            const whatsappText = `¡Hola! Acabo de realizar el pedido *#${orderId}* en Restaurante Rivera:%0A%0A*Cliente:* ${encodeURIComponent(name)}%0A*Ubicación:* ${encodeURIComponent(table)}%0A*Detalle:*%0A${itemsSummaryText}%0A%0A*Total con propina:* Q${total.toFixed(2)}%0A*Pago:* ${encodeURIComponent(paymentMethod)}%0A%0A_Por favor confirmen la recepción en cocina._`;
+            const itemsSummaryText = items.map(i => {
+                let str = `• ${i.quantity}x ${i.name} (Q${i.subtotal.toFixed(2)})`;
+                if (i.notes) str += ` [Nota: ${i.notes}]`;
+                return str;
+            }).join('%0A');
+
+            const addressSnippet = address ? `%0A*Dirección:* ${encodeURIComponent(address)}` : '';
+            const notesSnippet = generalNotes ? `%0A*Notas:* ${encodeURIComponent(generalNotes)}` : '';
+            const whatsappText = `¡Hola! Acabo de realizar el pedido *#${orderId}* en Restaurante Rivera:%0A%0A*Cliente:* ${encodeURIComponent(name)}%0A*Ubicación:* ${encodeURIComponent(table)}${addressSnippet}%0A*Detalle:*%0A${itemsSummaryText}${notesSnippet}%0A%0A*Total con propina:* Q${total.toFixed(2)}%0A*Pago:* ${encodeURIComponent(paymentMethod)}%0A%0A_Por favor confirmen la recepción en cocina._`;
             const whatsappLink = `https://wa.me/50255551234?text=${whatsappText}`;
+
+            const itemsDetailedHtml = items.map(it => `
+                <div style="display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 13px;">
+                    <div>
+                        <span><strong>${it.quantity}x</strong> ${escapeHtml(it.name)}</span>
+                        ${it.notes ? `<div style="font-size: 11px; color: #64748B; margin-left: 14px;">✍️ ${escapeHtml(it.notes)}</div>` : ''}
+                    </div>
+                    <span style="font-weight: 700; color: var(--text-main);">Q${Number(it.subtotal).toFixed(2)}</span>
+                </div>
+            `).join('');
 
             modalBody.innerHTML = `
                 <div class="success-card">
@@ -2056,8 +4835,18 @@
                             <span class="badge-status-pending">⏳ Pendiente Validación</span>
                         </div>
                         <div style="margin-top: 10px; font-size: 13px; color: var(--text-muted);">
-                            <strong>${table}</strong> • Total: <strong>Q${total.toFixed(2)}</strong>
+                            <strong>${escapeHtml(table)}</strong> ${address ? `• ${escapeHtml(address)}` : ''} • Total: <strong>Q${total.toFixed(2)}</strong>
                         </div>
+                        
+                        <div style="margin-top: 12px; border-top: 1px dashed var(--border-color); padding-top: 10px; text-align: left;">
+                            ${itemsDetailedHtml}
+                            ${generalNotes ? `<div style="font-size: 12px; color: var(--primary-dark); margin-top: 6px; background: rgba(13,148,136,0.08); padding: 6px 8px; border-radius: 6px;">📝 <em>${escapeHtml(generalNotes)}</em></div>` : ''}
+                        </div>
+                    </div>
+
+                    <div style="background: #EFF6FF; border: 1px solid #BFDBFE; border-radius: 10px; padding: 10px; font-size: 12px; color: #1E40AF; text-align: left; display: flex; align-items: center; gap: 8px; width: 100%;">
+                        <span style="font-size: 16px;">🔔</span>
+                        <span>Te notificaremos en tu pantalla con sonido y alerta en cuanto tu pedido esté <strong>Listo</strong> o <strong>Entregado</strong>.</span>
                     </div>
 
                     <p style="font-size: 12px; color: var(--text-muted);">
@@ -2077,14 +4866,64 @@
             `;
         }
 
-        // --- 9. INITIAL RUN ---
+        // --- 14. NETWORK CONNECTIVITY & OFFLINE PERSISTENCE HANDLERS ---
+        function updateOnlineStatusUI() {
+            const banner = document.getElementById('offlineBanner');
+            const icon = document.getElementById('offlineBannerIcon');
+            const text = document.getElementById('offlineBannerText');
+            if (!banner) return;
+
+            if (navigator.onLine) {
+                banner.classList.add('is-online');
+                icon.textContent = '🟢';
+                text.textContent = '¡Conexión restablecida! El menú y pedidos están sincronizados en tiempo real.';
+                setTimeout(() => {
+                    banner.style.display = 'none';
+                }, 3500);
+            } else {
+                banner.classList.remove('is-online');
+                banner.style.display = 'flex';
+                icon.textContent = '📡';
+                text.textContent = 'Sin conexión a internet: Modo Offline activo. El menú y tu historial están disponibles.';
+                showLiveToast("Modo Offline", "Sin conexión. Puedes consultar el menú e historial guardados en tu dispositivo.", "info", 5000);
+            }
+        }
+
+        window.addEventListener('online', updateOnlineStatusUI);
+        window.addEventListener('offline', updateOnlineStatusUI);
+
+        // --- 15. INITIAL RUN & INTERVAL CHECKS ---
         window.addEventListener('DOMContentLoaded', () => {
+            loadCachedMenuProducts();
             parseUrlParams();
+            loadSavedCustomerInfo();
             applyTheme(currentTheme);
             renderCategories();
             renderProducts();
+            initPredictiveSearch();
             initVoiceSearch();
+            initFormValidationListeners();
+            initClientFCM();
+            updateScheduleStatus();
+            updateOrderHistoryBadge();
             setupFirestoreListeners();
+            setupCustomerOrdersListener();
+
+            // Register Service Worker for offline asset & menu caching
+            if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.register('firebase-messaging-sw.js').then((reg) => {
+                    console.log('App Service Worker registrado para modo Offline & FCM:', reg.scope);
+                }).catch((err) => {
+                    console.warn('Error registrando Service Worker:', err);
+                });
+            }
+
+            if (!navigator.onLine) {
+                updateOnlineStatusUI();
+            }
+
+            // Periodic schedule checker every minute
+            setInterval(updateScheduleStatus, 60000);
         });
     </script>
 </body>
