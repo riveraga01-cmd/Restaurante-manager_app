@@ -1,5 +1,5 @@
 // Unified Service Worker: Firebase Cloud Messaging & Offline Cache Storage
-const CACHE_NAME = 'restaurante-rivera-v3';
+const CACHE_NAME = 'restaurante-rivera-v2';
 const STATIC_ASSETS = [
     './',
     './index.html',
@@ -39,7 +39,7 @@ self.addEventListener('activate', (event) => {
     );
 });
 
-// 3. Fetch Event: Network-first for HTML pages (immediate updates), Stale-While-Revalidate for static assets
+// 3. Fetch Event: Stale-While-Revalidate Strategy for web assets
 self.addEventListener('fetch', (event) => {
     // Only handle GET requests and skip firebase firestore/google apis streaming websockets
     if (event.request.method !== 'GET') return;
@@ -47,24 +47,6 @@ self.addEventListener('fetch', (event) => {
 
     // Skip firestore synchronization endpoints from SW caching
     if (url.hostname.includes('firestore.googleapis.com') || url.hostname.includes('firebaseio.com') || url.pathname.includes('/google.firestore.')) {
-        return;
-    }
-
-    // Network-first for HTML documents and navigation
-    if (event.request.mode === 'navigate' || url.pathname === '/' || url.pathname.endsWith('.html')) {
-        event.respondWith(
-            fetch(event.request).then((networkResponse) => {
-                if (networkResponse && networkResponse.status === 200) {
-                    const responseClone = networkResponse.clone();
-                    caches.open(CACHE_NAME).then((cache) => {
-                        cache.put(event.request, responseClone);
-                    });
-                }
-                return networkResponse;
-            }).catch(() => {
-                return caches.match('./index.html') || caches.match('./');
-            })
-        );
         return;
     }
 
@@ -79,6 +61,10 @@ self.addEventListener('fetch', (event) => {
                 }
                 return networkResponse;
             }).catch((fetchErr) => {
+                // If offline and request is an HTML navigation, fallback to cached index.html
+                if (event.request.mode === 'navigate') {
+                    return caches.match('./index.html') || caches.match('./');
+                }
                 return cachedResponse;
             });
 
