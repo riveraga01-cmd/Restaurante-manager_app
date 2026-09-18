@@ -1,0 +1,150 @@
+name: Android APK Build & Artifacts
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    paths-ignore:
+      - '**.md'
+      - '.gitignore'
+  pull_request:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+    inputs:
+      build_variant:
+        description: 'Variante de compilación de Android'
+        required: true
+        default: 'debug'
+        type: choice
+        options:
+          - 'debug'
+          - 'release'
+          - 'both'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-apk:
+    name: Compilar APK Android
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: 📥 Clonar repositorio
+        uses: actions/checkout@v4
+
+      - name: ☕ Configurar Java JDK 21 (Temurin)
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: 🐘 Configurar Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.3.1'
+          cache-read-only: ${{ github.ref != 'refs/heads/main' && github.ref != 'refs/heads/master' }}
+
+      - name: 🔐 Configurar variables de entorno y secrets (.env)
+        run: |
+          if [ ! -f .env ]; then
+            if [ -f .env.example ]; then
+              echo "Copiando .env.example hacia .env para Secrets Gradle Plugin..."
+              cp .env.example .env
+            else
+              touch .env
+            fi
+          fi
+
+      - name: 🔑 Restaurar o generar Keystore de depuración (debug.keystore)
+        run: |
+          if [ -f debug.keystore.base64 ]; then
+            echo "Decodificando debug.keystore desde debug.keystore.base64..."
+            base64 -d debug.keystore.base64 > debug.keystore
+          elif [ ! -f debug.keystore ]; then
+            echo "Generando debug.keystore estándar de Android..."
+            keytool -genkey -v \
+              -keystore debug.keystore \
+              -storepass android \
+              -alias androiddebugkey \
+              -keypass android \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000 \
+              -dname "CN=Android Debug,O=Android,C=US"
+          fi
+          ls -lh debug.keystore
+
+      - name: 🔑 Preparar Release Keystore (si está configurado en Secrets)
+        run: |
+          if [ -n "${{ secrets.KEYSTORE_BASE64 }}" ]; then
+            echo "Decodificando keystore de release desde secrets.KEYSTORE_BASE64..."
+            echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > "${{ github.workspace }}/my-upload-key.jks"
+            echo "KEYSTORE_PATH=${{ github.workspace }}/my-upload-key.jks" >> $GITHUB_ENV
+            echo "STORE_PASSWORD=${{ secrets.KEYSTORE_PASSWORD }}" >> $GITHUB_ENV
+            echo "KEY_PASSWORD=${{ secrets.KEY_PASSWORD }}" >> $GITHUB_ENV
+          elif [ ! -f "${{ github.workspace }}/my-upload-key.jks" ]; then
+            # Si no hay release keystore personalizado, copiar debug.keystore como fallback para release
+            echo "Creando fallback de release keystore temporal para permitir assembleRelease..."
+            cp debug.keystore "${{ github.workspace }}/my-upload-key.jks"
+            echo "KEYSTORE_PATH=${{ github.workspace }}/my-upload-key.jks" >> $GITHUB_ENV
+            echo "STORE_PASSWORD=android" >> $GITHUB_ENV
+            echo "KEY_PASSWORD=android" >> $GITHUB_ENV
+          fi
+
+      - name: ⚙️ Dar permisos de ejecución al Wrapper de Gradle
+        run: |
+          if [ -f gradlew ]; then
+            chmod +x gradlew
+          fi
+
+      - name: 🔨 Compilar APKs con Gradle
+        run: |
+          BUILD_CHOICE="${{ github.event.inputs.build_variant }}"
+          if [ -z "$BUILD_CHOICE" ]; then
+            BUILD_CHOICE="debug"
+          fi
+
+          echo "Ejecutando compilación para variante: $BUILD_CHOICE"
+
+          if [ -f gradlew ]; then
+            GRADLE_CMD="./gradlew"
+          else
+            GRADLE_CMD="gradle"
+          fi
+
+          case "$BUILD_CHOICE" in
+            "release")
+              $GRADLE_CMD :app:assembleRelease --stacktrace
+              ;;
+            "both")
+              $GRADLE_CMD :app:assembleDebug :app:assembleRelease --stacktrace
+              ;;
+            *)
+              $GRADLE_CMD :app:assembleDebug --stacktrace
+              ;;
+          esac
+
+      - name: 📦 Listar archivos APK generados
+        run: |
+          echo "Buscando archivos APK generados en el directorio de salida..."
+          mkdir -p apk-output
+          find app/build/outputs/apk/ -type f -name "*.apk" -exec cp {} apk-output/ \;
+          ls -la apk-output/
+          echo "Tamaño de cada APK:"
+          ls -lh apk-output/
+
+      - name: 🚀 Publicar APKs como artefacto de GitHub Actions
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-apks-${{ github.run_number }}
+          path: |
+            app/build/outputs/apk/**/*.apk
+          retention-days: 30
+          if-no-files-found: error
