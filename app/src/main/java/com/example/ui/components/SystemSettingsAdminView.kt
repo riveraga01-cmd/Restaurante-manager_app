@@ -297,10 +297,11 @@ fun SystemSettingsAdminView(
                             syncMessage = msg
                         }
                     },
-                    onGenerateCode = { role ->
-                        viewModel.generateDeviceBindingCode(role = role)
+                    onGenerateCode = { role, isMultiUse ->
+                        viewModel.generateDeviceBindingCode(role = role, isMultiUse = isMultiUse)
                     },
-                    onDeleteBinding = { viewModel.deleteDeviceBinding(it) }
+                    onDeleteBinding = { viewModel.deleteDeviceBinding(it) },
+                    onUnlinkDevice = { viewModel.deleteLinkedDevice(it) }
                 )
                 11 -> MaintenanceAndResetTab(
                     viewModel = viewModel,
@@ -2619,12 +2620,14 @@ private fun SyncAndBackupTab(
     deviceBindings: List<DeviceBindingEntity>,
     linkedDevices: List<LinkedDeviceEntity>,
     onTriggerSync: () -> Unit,
-    onGenerateCode: (String) -> Unit,
-    onDeleteBinding: (Long) -> Unit
+    onGenerateCode: (String, Boolean) -> Unit,
+    onDeleteBinding: (Long) -> Unit,
+    onUnlinkDevice: (String) -> Unit
 ) {
     val context = LocalContext.current
     val dateFormat = remember { SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault()) }
     var selectedRoleToBind by remember { mutableStateOf("MESERO") }
+    var isMultiUseForNewCode by remember { mutableStateOf(true) }
     var showQrModalForBinding by remember { mutableStateOf<DeviceBindingEntity?>(null) }
 
     LazyColumn(
@@ -2699,24 +2702,51 @@ private fun SyncAndBackupTab(
                     Text("Seleccione el rol para el nuevo dispositivo:", style = MaterialTheme.typography.labelMedium)
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        listOf("MESERO", "COCINA", "CAJA").forEach { r ->
+                        listOf("MESERO", "COCINA", "CAJA", "REPARTIDOR", "GERENTE").forEach { r ->
                             FilterChip(
                                 selected = selectedRoleToBind == r,
                                 onClick = { selectedRoleToBind = r },
-                                label = { Text(r) }
+                                label = { Text(r, fontSize = 11.sp) }
+                            )
+                        }
+                    }
+
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f)),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
+                                Text("Vincular a varios dispositivos", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                Text(
+                                    "Permite que múltiples terminales (teléfonos, tablets) se vinculen usando el mismo QR o código sin desactivarlo.",
+                                    fontSize = 11.sp,
+                                    color = Color.DarkGray
+                                )
+                            }
+                            Switch(
+                                checked = isMultiUseForNewCode,
+                                onCheckedChange = { isMultiUseForNewCode = it }
                             )
                         }
                     }
 
                     Button(
-                        onClick = { onGenerateCode(selectedRoleToBind) },
+                        onClick = { onGenerateCode(selectedRoleToBind, isMultiUseForNewCode) },
                         modifier = Modifier.fillMaxWidth().testTag("btn_generar_codigo_vinculacion")
                     ) {
                         Icon(Icons.Default.QrCode, contentDescription = null)
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Generar Código de Vinculación")
+                        Text("Generar Código ${if (isMultiUseForNewCode) "Multidispositivo" else "Uso Único"}")
                     }
                 }
             }
@@ -2775,12 +2805,29 @@ private fun SyncAndBackupTab(
                             }
                         }
 
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Surface(
+                                shape = RoundedCornerShape(6.dp),
+                                color = if (binding.isMultiUse) Color(0xFFE0F2FE) else Color(0xFFF1F5F9)
+                            ) {
+                                Text(
+                                    text = if (binding.isMultiUse) "🌐 Multidispositivo (${binding.usedCount} vinculados)" else "🔒 Uso único",
+                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                    color = if (binding.isMultiUse) Color(0xFF0284C7) else Color(0xFF64748B),
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
+                            }
+                        }
+
                         Text(
                             text = "Rol Asignado: ${binding.assignedRole} • Sucursal: ${binding.branchName}",
                             style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold)
                         )
                         Text(
-                            text = "Vence: ${dateFormat.format(Date(binding.expiresAt))} • Usos: ${binding.usedCount}",
+                            text = "Vence: ${dateFormat.format(Date(binding.expiresAt))}",
                             style = MaterialTheme.typography.labelSmall,
                             color = Color.Gray
                         )
@@ -2842,16 +2889,25 @@ private fun SyncAndBackupTab(
                         )
                     }
 
-                    Surface(
-                        shape = RoundedCornerShape(8.dp),
-                        color = if (dev.isBlocked) Color(0xFFFEE2E2) else Color(0xFFD1FAE5)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Text(
-                            text = if (dev.isBlocked) "BLOQUEADO" else "ACTIVO",
-                            color = if (dev.isBlocked) Color.Red else Color(0xFF059669),
-                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                        )
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = if (dev.isBlocked) Color(0xFFFEE2E2) else Color(0xFFD1FAE5)
+                        ) {
+                            Text(
+                                text = if (dev.isBlocked) "BLOQUEADO" else "ACTIVO",
+                                color = if (dev.isBlocked) Color.Red else Color(0xFF059669),
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                            )
+                        }
+
+                        IconButton(onClick = { onUnlinkDevice(dev.deviceId) }) {
+                            Icon(Icons.Default.DeleteOutline, contentDescription = "Desvincular Dispositivo", tint = Color.Red)
+                        }
                     }
                 }
             }
@@ -2864,8 +2920,10 @@ private fun SyncAndBackupTab(
             org.json.JSONObject().apply {
                 put("type", "DEVICE_PAIRING")
                 put("code", binding.code)
+                put("pin", bindingPin)
                 put("role", binding.assignedRole)
                 put("branch", binding.branchName)
+                put("isMultiUse", binding.isMultiUse)
                 put("token", UUID.randomUUID().toString())
                 put("timestamp", System.currentTimeMillis())
             }.toString()
@@ -2913,6 +2971,23 @@ private fun SyncAndBackupTab(
                             ),
                             modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
                         )
+                    }
+
+                    if (binding.isMultiUse) {
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = Color(0xFFE0F2FE)
+                        ) {
+                            Text(
+                                text = "🌐 Código Multidispositivo: Varios dispositivos pueden escanearlo.",
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = Color(0xFF0369A1)
+                                ),
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                                textAlign = TextAlign.Center
+                            )
+                        }
                     }
 
                     com.example.util.QRCodeDisplay(

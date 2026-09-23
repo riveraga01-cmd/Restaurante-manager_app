@@ -17,7 +17,9 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
@@ -25,6 +27,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
 import com.example.data.entity.InvoiceEntity
 import com.example.data.entity.OrderItemEntity
 import com.example.ui.theme.EmeraldSuccess
@@ -384,10 +387,35 @@ fun InvoiceDetailDialog(
                 ) {
                     Column(modifier = Modifier.padding(14.dp)) {
                         // Header Datos Restaurante
+                        if (invoice.showLogo && invoice.logoUri.isNotBlank()) {
+                            if (invoice.logoUri == "ic_restaurant") {
+                                Icon(
+                                    Icons.Default.Restaurant,
+                                    contentDescription = "Logo",
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier
+                                        .size(36.dp)
+                                        .padding(bottom = 6.dp)
+                                )
+                            } else {
+                                AsyncImage(
+                                    model = invoice.logoUri,
+                                    contentDescription = "Logo Restaurante",
+                                    modifier = Modifier
+                                        .size(48.dp)
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .padding(bottom = 6.dp),
+                                    contentScale = ContentScale.Fit
+                                )
+                            }
+                        }
                         if (invoice.showRestaurantName) {
                             Text(
                                 text = invoice.restaurantName.uppercase(),
-                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.primary)
+                                style = MaterialTheme.typography.titleMedium.copy(
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
                             )
                         }
                         if (invoice.showBranchName && invoice.branchName.isNotBlank()) {
@@ -534,47 +562,89 @@ fun InvoiceDetailDialog(
             }
         },
         confirmButton = {
-            Row(
+            Column(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Button(
+                        onClick = {
+                            ReportExportHelper.printOrExportInvoicePdf(context, invoice, orderItems)
+                        },
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag("btn_exportar_pdf_factura")
+                    ) {
+                        Icon(Icons.Default.PictureAsPdf, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("PDF FEL", fontSize = 11.sp)
+                    }
+
+                    FilledTonalButton(
+                        onClick = {
+                            val paperWidth = if (invoice.paperWidthMm == 58) 58 else 80
+                            ReportExportHelper.printThermalReceipt(
+                                context = context,
+                                invoice = invoice,
+                                items = orderItems,
+                                paperWidthMm = paperWidth
+                            )
+                        },
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag("btn_imprimir_termica_factura")
+                    ) {
+                        Icon(Icons.Default.Print, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Térmica", fontSize = 11.sp)
+                    }
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = {
+                            ReportExportHelper.shareInvoiceViaWhatsApp(context, invoice, orderItems)
+                        },
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag("btn_whatsapp_factura")
+                    ) {
+                        Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("WhatsApp", fontSize = 11.sp)
+                    }
+
+                    OutlinedButton(
+                        onClick = {
+                            ReportExportHelper.sendInvoiceViaEmail(context, invoice, orderItems)
+                        },
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag("btn_email_factura")
+                    ) {
+                        Icon(Icons.Default.Email, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Correo", fontSize = 11.sp)
+                    }
+                }
+
+                // Botón destacado "Listo / Finalizado"
                 Button(
-                    onClick = {
-                        ReportExportHelper.printOrExportInvoicePdf(context, invoice, orderItems)
-                    },
+                    onClick = onDismiss,
+                    colors = ButtonDefaults.buttonColors(containerColor = EmeraldSuccess),
                     modifier = Modifier
-                        .weight(1f)
-                        .testTag("btn_exportar_pdf_factura")
+                        .fillMaxWidth()
+                        .testTag("btn_factura_listo_finalizado")
                 ) {
-                    Icon(Icons.Default.PictureAsPdf, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("PDF / Imprimir", fontSize = 11.sp)
-                }
-
-                OutlinedButton(
-                    onClick = {
-                        ReportExportHelper.shareInvoiceViaWhatsApp(context, invoice, orderItems)
-                    },
-                    modifier = Modifier
-                        .weight(1f)
-                        .testTag("btn_whatsapp_factura")
-                ) {
-                    Icon(Icons.Default.Share, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("WhatsApp", fontSize = 11.sp)
-                }
-
-                OutlinedButton(
-                    onClick = {
-                        ReportExportHelper.sendInvoiceViaEmail(context, invoice, orderItems)
-                    },
-                    modifier = Modifier
-                        .weight(1f)
-                        .testTag("btn_email_factura")
-                ) {
-                    Icon(Icons.Default.Email, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("Correo", fontSize = 11.sp)
+                    Icon(Icons.Default.CheckCircle, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Listo / Finalizado", fontWeight = FontWeight.Bold)
                 }
             }
         }
@@ -852,7 +922,20 @@ private fun BillingSettingsPanel(
 
                             Text(divChar, fontFamily = FontFamily.Monospace, fontSize = 11.sp, color = Color.Gray)
                             if (showLogo) {
-                                Text("[ LOGOTIPO DEL RESTAURANTE ]", modifier = Modifier.align(Alignment.CenterHorizontally), fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                if (settings.logoUri.isNotBlank() && settings.logoUri != "ic_restaurant") {
+                                    AsyncImage(
+                                        model = settings.logoUri,
+                                        contentDescription = "Logo",
+                                        modifier = Modifier
+                                            .size(42.dp)
+                                            .clip(RoundedCornerShape(6.dp))
+                                            .align(Alignment.CenterHorizontally),
+                                        contentScale = ContentScale.Fit
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                } else {
+                                    Text("[ LOGOTIPO DEL RESTAURANTE ]", modifier = Modifier.align(Alignment.CenterHorizontally), fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                }
                             }
                             if (showRestaurantName && restaurantName.isNotBlank()) {
                                 Text(restaurantName.uppercase(), modifier = Modifier.align(Alignment.CenterHorizontally), fontWeight = FontWeight.ExtraBold, fontSize = 14.sp)

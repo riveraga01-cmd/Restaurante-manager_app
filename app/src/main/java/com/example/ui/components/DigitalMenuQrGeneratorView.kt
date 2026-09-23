@@ -7,6 +7,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -49,43 +50,46 @@ fun DigitalMenuQrGeneratorView(
     val allMenuItems by viewModel.allMenuItems.collectAsState()
     val allTables by viewModel.allTables.collectAsState()
 
-    var selectedQrType by remember { mutableStateOf(0) } // 0: Menú Digital Web, 1: Pedidos WhatsApp, 2: QR por Mesa
-    val defaultWebMenuUrl = "https://riveraga01-cmd.github.io/Restaurante-manager_app/"
-    var targetUrl by remember(systemSettings.website) { 
-        val site = systemSettings.website.trim()
-        val formatted = when {
-            site.isBlank() || site == "www.restauranterivera.com" || site == "https://restauranterivera.com/menu-digital" -> defaultWebMenuUrl
-            site.startsWith("http://") || site.startsWith("https://") -> site
-            else -> "https://$site"
+    // 0: QR General / A Domicilio, 1: QR Individual por Mesa
+    var selectedQrType by remember { mutableStateOf(0) }
+    val baseWebMenuUrl = remember(systemSettings.website) {
+        val raw = systemSettings.website.trim().let {
+            if (it.isBlank() || it.contains("Restaurante-manager_app") || it == "www.restauranterivera.com") {
+                "https://riveraga01-cmd.github.io/Restaurante/"
+            } else {
+                it
+            }
         }
-        mutableStateOf(formatted)
-    }
-    var whatsappNumber by remember(systemSettings.whatsapp) { mutableStateOf(systemSettings.whatsapp) }
-    var whatsappWelcomeMsg by remember { 
-        mutableStateOf("¡Hola! Deseo realizar un pedido de Restaurante Rivera:\n- Mesa / Para Llevar:\n- Detalle del pedido:\n- Dirección de entrega (si aplica):") 
+        if (raw.endsWith("/")) raw else "$raw/"
     }
 
     var selectedTableForQr by remember { mutableStateOf<TableEntity?>(null) }
+    var manualTableNum by remember { mutableStateOf("1") }
     var customBannerNote by remember { mutableStateOf("¡Escanea para ver nuestro Menú Digital en tu móvil!") }
 
-    // Computed QR Content
-    val currentQrContent = remember(selectedQrType, targetUrl, whatsappNumber, whatsappWelcomeMsg, selectedTableForQr) {
-        when (selectedQrType) {
-            0 -> targetUrl
-            1 -> {
-                val cleanPhone = whatsappNumber.replace(Regex("[^0-9]"), "")
-                "https://wa.me/$cleanPhone?text=${java.net.URLEncoder.encode(whatsappWelcomeMsg, "UTF-8")}"
-            }
-            2 -> {
-                val tableName = selectedTableForQr?.tableNumber ?: "Mesa 1"
-                val baseUrl = targetUrl.trimEnd('/')
-                "$baseUrl?mesa=${java.net.URLEncoder.encode(tableName, "UTF-8")}&branch=${java.net.URLEncoder.encode(systemSettings.branchName, "UTF-8")}"
-            }
-            else -> targetUrl
+    // Helper to compute table number string
+    val currentTableNum = remember(selectedTableForQr, manualTableNum) {
+        val fromSelection = selectedTableForQr?.tableNumber?.filter { it.isDigit() }
+        if (!fromSelection.isNullOrBlank()) {
+            fromSelection
+        } else if (manualTableNum.isNotBlank()) {
+            manualTableNum.filter { it.isDigit() }.ifBlank { "1" }
+        } else {
+            "1"
         }
     }
 
-    var showPrintDialog by remember { mutableStateOf(false) }
+    // Computed QR Content URL strictly according to requirements:
+    // a) QR General / A Domicilio: https://riveraga01-cmd.github.io/Restaurante-manager_app/?tipo=domicilio
+    // b) QR Individual por Mesa: https://riveraga01-cmd.github.io/Restaurante-manager_app/?tipo=mesa&num=X
+    val currentQrContent = remember(selectedQrType, currentTableNum, baseWebMenuUrl) {
+        when (selectedQrType) {
+            0 -> "${baseWebMenuUrl}?tipo=domicilio"
+            1 -> "${baseWebMenuUrl}?tipo=mesa&num=${currentTableNum}"
+            else -> "${baseWebMenuUrl}?tipo=domicilio"
+        }
+    }
+
     var showWebSimulator by remember { mutableStateOf(false) }
 
     LazyColumn(
@@ -95,6 +99,7 @@ fun DigitalMenuQrGeneratorView(
         verticalArrangement = Arrangement.spacedBy(16.dp),
         contentPadding = PaddingValues(bottom = 24.dp)
     ) {
+        // Header & Selection of QR Type
         item {
             Card(
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -126,12 +131,12 @@ fun DigitalMenuQrGeneratorView(
                         }
                         Column {
                             Text(
-                                text = "Generador de QR para Menú Digital & WhatsApp",
+                                text = "Generador de Códigos QR para Menú Web",
                                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                                 color = MaterialTheme.colorScheme.onSurface
                             )
                             Text(
-                                text = "Genere códigos QR listos para imprimir y colocar en mesas o compartir en redes sociales.",
+                                text = "Genere códigos QR listos para colocar en mesas o compartir en redes sociales.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -147,18 +152,31 @@ fun DigitalMenuQrGeneratorView(
                     ) {
                         Tab(
                             selected = selectedQrType == 0,
-                            onClick = { selectedQrType = 0 },
-                            text = { Text("🌐 Menú Web", fontSize = 12.sp, fontWeight = FontWeight.Bold) }
+                            onClick = { 
+                                selectedQrType = 0 
+                                customBannerNote = "¡Pide a Domicilio o Para Llevar escaneando este QR!"
+                            },
+                            text = { 
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Default.DeliveryDining, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("🛵 General / A Domicilio", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
                         )
                         Tab(
                             selected = selectedQrType == 1,
-                            onClick = { selectedQrType = 1 },
-                            text = { Text("💬 WhatsApp", fontSize = 12.sp, fontWeight = FontWeight.Bold) }
-                        )
-                        Tab(
-                            selected = selectedQrType == 2,
-                            onClick = { selectedQrType = 2 },
-                            text = { Text("🪑 Por Mesa", fontSize = 12.sp, fontWeight = FontWeight.Bold) }
+                            onClick = { 
+                                selectedQrType = 1 
+                                customBannerNote = "¡Ordena directamente desde tu mesa escaneando este QR!"
+                            },
+                            text = { 
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Default.TableBar, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("🪑 Individual por Mesa", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
                         )
                     }
                 }
@@ -179,79 +197,108 @@ fun DigitalMenuQrGeneratorView(
                 ) {
                     when (selectedQrType) {
                         0 -> {
-                            Text("Configuración de Enlace Web:", style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold))
+                            Text("Configuración de QR General / A Domicilio:", style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold))
+                            Text(
+                                text = "Este código QR dirige a la carta digital con el flujo de entrega a domicilio activado, solicitando nombre, teléfono, ubicación GPS y dirección.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                             OutlinedTextField(
-                                value = targetUrl,
-                                onValueChange = { targetUrl = it },
-                                label = { Text("URL o Enlace del Menú Digital") },
+                                value = currentQrContent,
+                                onValueChange = {},
+                                readOnly = true,
+                                label = { Text("Enlace Generado (Automático)") },
                                 singleLine = true,
                                 shape = RoundedCornerShape(12.dp),
                                 leadingIcon = { Icon(Icons.Default.Link, contentDescription = null) },
-                                modifier = Modifier.fillMaxWidth().testTag("input_qr_menu_url")
+                                modifier = Modifier.fillMaxWidth().testTag("input_qr_domicilio_url")
                             )
                         }
                         1 -> {
-                            Text("Configuración de Pedidos por WhatsApp:", style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold))
-                            OutlinedTextField(
-                                value = whatsappNumber,
-                                onValueChange = { whatsappNumber = it },
-                                label = { Text("Número de WhatsApp del Restaurante") },
-                                singleLine = true,
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
-                                shape = RoundedCornerShape(12.dp),
-                                leadingIcon = { Icon(Icons.Default.Phone, contentDescription = null) },
-                                modifier = Modifier.fillMaxWidth().testTag("input_qr_whatsapp_phone")
-                            )
-
-                            OutlinedTextField(
-                                value = whatsappWelcomeMsg,
-                                onValueChange = { whatsappWelcomeMsg = it },
-                                label = { Text("Mensaje Predeterminado al Iniciar Chat") },
-                                minLines = 3,
-                                maxLines = 5,
-                                shape = RoundedCornerShape(12.dp),
-                                modifier = Modifier.fillMaxWidth().testTag("input_qr_whatsapp_msg")
-                            )
-                        }
-                        2 -> {
                             Text("Asignación de Mesa para el QR:", style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold))
-                            OutlinedTextField(
-                                value = targetUrl,
-                                onValueChange = { targetUrl = it },
-                                label = { Text("URL Base del Menú Digital") },
-                                singleLine = true,
-                                shape = RoundedCornerShape(12.dp),
-                                leadingIcon = { Icon(Icons.Default.Link, contentDescription = null) },
-                                modifier = Modifier.fillMaxWidth()
+                            Text(
+                                text = "Seleccione o escriba el número de mesa. El QR fijará la mesa y ocultará los datos de entrega innecesarios.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
 
-                            Text("Seleccione la Mesa:", style = MaterialTheme.typography.bodySmall)
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                (allTables.takeIf { it.isNotEmpty() } ?: listOf(
+                            // Quick table selector chips
+                            val tablesToDisplay = if (allTables.isNotEmpty()) {
+                                allTables
+                            } else {
+                                listOf(
                                     TableEntity(id = 1, tableNumber = "Mesa 1"),
                                     TableEntity(id = 2, tableNumber = "Mesa 2"),
                                     TableEntity(id = 3, tableNumber = "Mesa 3"),
                                     TableEntity(id = 4, tableNumber = "Mesa 4"),
-                                    TableEntity(id = 5, tableNumber = "Mesa 5")
-                                )).take(6).forEach { table ->
-                                    val isSelected = (selectedTableForQr?.tableNumber ?: "Mesa 1") == table.tableNumber
+                                    TableEntity(id = 5, tableNumber = "Mesa 5"),
+                                    TableEntity(id = 6, tableNumber = "Mesa 6"),
+                                    TableEntity(id = 7, tableNumber = "Mesa 7"),
+                                    TableEntity(id = 8, tableNumber = "Mesa 8")
+                                )
+                            }
+
+                            Text("Mesas del Restaurante:", style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold))
+                            LazyRow(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                items(tablesToDisplay) { table ->
+                                    val tNum = table.tableNumber.filter { it.isDigit() }.ifBlank { table.tableNumber }
+                                    val isSelected = currentTableNum == tNum
                                     FilterChip(
                                         selected = isSelected,
-                                        onClick = { selectedTableForQr = table },
-                                        label = { Text(table.tableNumber) }
+                                        onClick = { 
+                                            selectedTableForQr = table 
+                                            manualTableNum = tNum
+                                        },
+                                        label = { Text("Mesa $tNum", fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal) },
+                                        leadingIcon = if (isSelected) {
+                                            { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp)) }
+                                        } else null
                                     )
                                 }
                             }
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                OutlinedTextField(
+                                    value = manualTableNum,
+                                    onValueChange = { input ->
+                                        val digitsOnly = input.filter { it.isDigit() }
+                                        manualTableNum = digitsOnly
+                                        selectedTableForQr = null
+                                    },
+                                    label = { Text("Número de Mesa") },
+                                    placeholder = { Text("1") },
+                                    singleLine = true,
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                    shape = RoundedCornerShape(12.dp),
+                                    leadingIcon = { Icon(Icons.Default.TableRestaurant, contentDescription = null) },
+                                    modifier = Modifier.weight(1f).testTag("input_qr_table_num")
+                                )
+                            }
+
+                            OutlinedTextField(
+                                value = currentQrContent,
+                                onValueChange = {},
+                                readOnly = true,
+                                label = { Text("Enlace Generado por Mesa") },
+                                singleLine = true,
+                                shape = RoundedCornerShape(12.dp),
+                                leadingIcon = { Icon(Icons.Default.Link, contentDescription = null) },
+                                modifier = Modifier.fillMaxWidth().testTag("input_qr_mesa_url")
+                            )
                         }
                     }
 
                     OutlinedTextField(
                         value = customBannerNote,
                         onValueChange = { customBannerNote = it },
-                        label = { Text("Encabezado o Lema para Imprimir") },
+                        label = { Text("Lema o Instrucción para el Cliente") },
                         singleLine = true,
                         shape = RoundedCornerShape(12.dp),
                         modifier = Modifier.fillMaxWidth()
@@ -281,7 +328,7 @@ fun DigitalMenuQrGeneratorView(
                         color = MaterialTheme.colorScheme.primaryContainer
                     ) {
                         Text(
-                            text = "VISTA PREVIA DEL SOPORTE DE MESA",
+                            text = if (selectedQrType == 1) "TARJETA DE MESA (STAND QR)" else "QR PROMOCIONAL A DOMICILIO",
                             style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
                             color = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp)
@@ -304,14 +351,28 @@ fun DigitalMenuQrGeneratorView(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
 
-                    if (selectedQrType == 2) {
+                    if (selectedQrType == 1) {
                         Surface(
                             shape = RoundedCornerShape(12.dp),
                             color = BentoPrimary
                         ) {
                             Text(
-                                text = "🪑 ${selectedTableForQr?.tableNumber ?: "Mesa 1"}",
+                                text = "🪑 Mesa $currentTableNum",
                                 style = MaterialTheme.typography.titleMedium.copy(
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White
+                                ),
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
+                            )
+                        }
+                    } else {
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = EmeraldSuccess
+                        ) {
+                            Text(
+                                text = "🛵 A Domicilio y Para Llevar",
+                                style = MaterialTheme.typography.titleSmall.copy(
                                     fontWeight = FontWeight.Bold,
                                     color = Color.White
                                 ),
@@ -327,13 +388,20 @@ fun DigitalMenuQrGeneratorView(
                         modifier = Modifier.padding(vertical = 8.dp)
                     )
 
-                    Text(
-                        text = currentQrContent,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.outline,
-                        maxLines = 2,
-                        textAlign = TextAlign.Center
-                    )
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = currentQrContent,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 2,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.padding(8.dp)
+                        )
+                    }
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -341,22 +409,24 @@ fun DigitalMenuQrGeneratorView(
                     ) {
                         OutlinedButton(
                             onClick = {
-                                QRCodeHelper.copyToClipboard(context, "QR Link", currentQrContent)
+                                QRCodeHelper.copyToClipboard(context, "Enlace Menú QR", currentQrContent)
+                                Toast.makeText(context, "Enlace copiado al portapapeles", Toast.LENGTH_SHORT).show()
                             },
                             shape = RoundedCornerShape(12.dp),
                             modifier = Modifier.weight(1f).testTag("btn_copiar_qr_link")
                         ) {
                             Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(18.dp))
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("Copiar Enlace")
+                            Text("Copiar")
                         }
 
                         Button(
                             onClick = {
+                                val shareTitle = if (selectedQrType == 1) "Menú QR Mesa $currentTableNum" else "Menú QR A Domicilio"
                                 QRCodeHelper.shareQrImageOrText(
                                     context = context,
-                                    title = "Compartir Menú QR",
-                                    textToShare = "${systemSettings.restaurantName} - Menú Digital:\n$currentQrContent"
+                                    title = shareTitle,
+                                    textToShare = "${systemSettings.restaurantName} - $shareTitle:\n$currentQrContent"
                                 )
                             },
                             shape = RoundedCornerShape(12.dp),
@@ -378,21 +448,7 @@ fun DigitalMenuQrGeneratorView(
                     ) {
                         Icon(Icons.Default.PhoneAndroid, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text("📱 Probar Menú Web del Cliente (Simulador)")
-                    }
-
-                    if (selectedQrType == 1) {
-                        FilledTonalButton(
-                            onClick = {
-                                QRCodeHelper.openWhatsAppMessage(context, whatsappNumber, whatsappWelcomeMsg)
-                            },
-                            shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier.fillMaxWidth().testTag("btn_probar_whatsapp")
-                        ) {
-                            Icon(Icons.Default.Send, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Probar Chat de WhatsApp Directo")
-                        }
+                        Text(if (selectedQrType == 1) "📱 Probar Menú Mesa $currentTableNum" else "📱 Probar Menú A Domicilio")
                     }
                 }
             }
@@ -420,7 +476,7 @@ fun DigitalMenuQrGeneratorView(
                             style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold)
                         )
                         Text(
-                            text = "Actualizado en Vivo",
+                            text = "Sincronizado",
                             style = MaterialTheme.typography.labelSmall,
                             color = EmeraldSuccess
                         )
@@ -448,9 +504,10 @@ fun DigitalMenuQrGeneratorView(
     }
 
     if (showWebSimulator) {
-        val currentTableNum = selectedTableForQr?.tableNumber ?: "Mesa 1"
+        val simTable = if (selectedQrType == 1) "Mesa $currentTableNum" else "A Domicilio"
         WebMenuSimulatorDialog(
-            initialTable = currentTableNum,
+            initialTable = simTable,
+            customBaseUrl = baseWebMenuUrl,
             onDismiss = { showWebSimulator = false }
         )
     }

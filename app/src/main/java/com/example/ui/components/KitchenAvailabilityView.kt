@@ -39,6 +39,7 @@ fun KitchenAvailabilityView(
     modifier: Modifier = Modifier
 ) {
     val allMenuItems by viewModel.allMenuItems.collectAsState()
+    val systemSettings by viewModel.systemSettings.collectAsState()
     var searchQuery by remember { mutableStateOf("") }
     var selectedCategory by remember { mutableStateOf("Todos") }
     var statusFilter by remember { mutableStateOf("TODOS") } // "TODOS", "DISPONIBLE", "AGOTADO"
@@ -86,6 +87,7 @@ fun KitchenAvailabilityView(
     if (showWebSimulator) {
         WebMenuSimulatorDialog(
             initialTable = "Mesa 1",
+            customBaseUrl = systemSettings.website,
             onDismiss = { showWebSimulator = false }
         )
     }

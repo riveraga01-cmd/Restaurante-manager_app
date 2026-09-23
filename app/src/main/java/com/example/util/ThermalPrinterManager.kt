@@ -6,6 +6,7 @@ import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothSocket
 import android.content.Context
 import android.util.Log
+import com.example.data.entity.InvoiceEntity
 import com.example.data.entity.OrderEntity
 import com.example.data.entity.OrderItemEntity
 import com.example.ui.components.formatQuetzales
@@ -259,6 +260,271 @@ class ThermalPrinterManager(private val context: Context) {
         baos.write(PAPER_CUT)
 
         return baos.toByteArray()
+    }
+
+    fun generateInvoiceTicketText(
+        invoice: InvoiceEntity,
+        items: List<OrderItemEntity>,
+        paperWidthMm: Int = 80
+    ): String {
+        val dateFormat = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault())
+        val dateStr = dateFormat.format(Date(invoice.timestamp))
+        val is58mm = paperWidthMm <= 58
+        val width = if (is58mm) 32 else 48
+        val divider = "-".repeat(width)
+        val doubleDivider = "=".repeat(width)
+
+        val serie = if (invoice.invoiceNumber.contains("-")) {
+            invoice.invoiceNumber.substringBeforeLast("-").ifBlank { "FEL-A" }
+        } else {
+            "FEL-A"
+        }
+        val dteNum = invoice.invoiceNumber.substringAfterLast("-", invoice.invoiceNumber)
+        val cur = invoice.currencySymbol
+
+        val sb = StringBuilder()
+        sb.appendLine(doubleDivider)
+        sb.appendLine(centerText(invoice.restaurantName.uppercase(), width))
+        if (invoice.branchName.isNotBlank()) {
+            sb.appendLine(centerText("Sucursal: ${invoice.branchName}", width))
+        }
+        sb.appendLine(centerText("NIT Emisor: ${invoice.restaurantTaxId.ifBlank { "1234567-8" }}", width))
+        if (invoice.restaurantAddress.isNotBlank()) {
+            val addr = if (invoice.restaurantAddress.length > width) invoice.restaurantAddress.take(width - 3) + "..." else invoice.restaurantAddress
+            sb.appendLine(centerText(addr, width))
+        }
+        if (invoice.restaurantPhone.isNotBlank()) {
+            sb.appendLine(centerText("Tel: ${invoice.restaurantPhone}", width))
+        }
+        sb.appendLine(divider)
+        sb.appendLine(centerText("DOCUMENTO TRIBUTARIO ELECTRÓNICO", width))
+        sb.appendLine(centerText("FACTURA (FEL)", width))
+        sb.appendLine("SERIE: $serie | NÚMERO: $dteNum")
+        sb.appendLine("FECHA EMISIÓN: $dateStr")
+        sb.appendLine("RÉGIMEN: Pagos Trimestrales ISR")
+        sb.appendLine(divider)
+
+        val clientName = when {
+            invoice.customerName.isNotBlank() -> invoice.customerName
+            invoice.customerType.isNotBlank() -> invoice.customerType
+            else -> "Consumidor Final"
+        }
+        sb.appendLine("CLIENTE: $clientName")
+        sb.appendLine("NIT: ${invoice.customerNit.ifBlank { "C/F" }}")
+        if (invoice.orderNumber.isNotBlank()) {
+            sb.appendLine("COMANDA: #${invoice.orderNumber}${if (invoice.tableNumber.isNotBlank()) " | MESA: ${invoice.tableNumber}" else ""}")
+        }
+        sb.appendLine("CAJERO: ${invoice.cashierName} | PAGO: ${invoice.paymentMethod}")
+        sb.appendLine(divider)
+
+        if (is58mm) {
+            sb.appendLine("CANT DESCRIPCION        TOTAL")
+            sb.appendLine(divider)
+            for (item in items) {
+                val qtyStr = "${item.quantity}x".padEnd(4)
+                val priceStr = "$cur${String.format(Locale.US, "%.2f", item.subtotal)}".padStart(8)
+                val descWidth = width - qtyStr.length - priceStr.length
+                val descStr = if (item.productName.length > descWidth) item.productName.take(descWidth) else item.productName.padEnd(descWidth)
+                sb.appendLine("$qtyStr$descStr$priceStr")
+                if (item.notes.isNotBlank()) {
+                    sb.appendLine("     * ${item.notes.take(width - 7)}")
+                }
+            }
+        } else {
+            sb.appendLine("CANT COD  DESCRIPCION            P.UNIT    TOTAL")
+            sb.appendLine(divider)
+            items.forEachIndexed { idx, item ->
+                val qtyStr = "${item.quantity}x".padEnd(4)
+                val codStr = "#${idx + 1}".padEnd(5)
+                val uPriceStr = "$cur${String.format(Locale.US, "%.2f", item.unitPrice)}".padStart(8)
+                val totStr = "$cur${String.format(Locale.US, "%.2f", item.subtotal)}".padStart(9)
+                val descW = width - (qtyStr.length + codStr.length + uPriceStr.length + totStr.length)
+                val descStr = if (item.productName.length > descW) item.productName.take(descW) else item.productName.padEnd(descW)
+                sb.appendLine("$qtyStr$codStr$descStr$uPriceStr$totStr")
+                if (item.notes.isNotBlank()) {
+                    sb.appendLine("         * ${item.notes.take(width - 11)}")
+                }
+            }
+        }
+
+        sb.appendLine(divider)
+        val baseAmount = invoice.totalAmount / 1.12
+        val vatAmount = invoice.totalAmount - baseAmount
+
+        sb.appendLine(formatLine("Subtotal:", "$cur${String.format(Locale.US, "%.2f", invoice.subtotal)}", width))
+        if (invoice.discount > 0) {
+            sb.appendLine(formatLine("Descuento:", "-$cur${String.format(Locale.US, "%.2f", invoice.discount)}", width))
+        }
+        sb.appendLine(formatLine("Base Imponible:", "$cur${String.format(Locale.US, "%.2f", baseAmount)}", width))
+        sb.appendLine(formatLine("IVA (12%):", "$cur${String.format(Locale.US, "%.2f", vatAmount)}", width))
+        sb.appendLine(doubleDivider)
+        sb.appendLine(formatLine("TOTAL A PAGAR:", "$cur${String.format(Locale.US, "%.2f", invoice.totalAmount)}", width))
+        sb.appendLine(doubleDivider)
+
+        val totalWords = NumberToWordsHelper.toSpanishWords(invoice.totalAmount)
+        sb.appendLine("TOTAL EN LETRAS:")
+        sb.appendLine(totalWords)
+        sb.appendLine(divider)
+
+        sb.appendLine(centerText("CERTIFICACIÓN SAT", width))
+        sb.appendLine(centerText("INFILE, S.A. NIT: 125543-9", width))
+        sb.appendLine(centerText("Documento Tributario Electrónico", width))
+        if (invoice.footerMessage.isNotBlank()) {
+            sb.appendLine(divider)
+            sb.appendLine(centerText(invoice.footerMessage, width))
+        }
+        sb.appendLine(doubleDivider)
+        sb.appendLine("\n\n\n")
+        return sb.toString()
+    }
+
+    fun buildEscPosBytesForInvoice(
+        invoice: InvoiceEntity,
+        items: List<OrderItemEntity>,
+        paperWidthMm: Int = 80
+    ): ByteArray {
+        val baos = java.io.ByteArrayOutputStream()
+        val dateFormat = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault())
+        val dateStr = dateFormat.format(Date(invoice.timestamp))
+        val is58mm = paperWidthMm <= 58
+        val width = if (is58mm) 32 else 48
+        val divider = "-".repeat(width) + "\n"
+        val doubleDivider = "=".repeat(width) + "\n"
+        val cur = invoice.currencySymbol
+
+        val serie = if (invoice.invoiceNumber.contains("-")) {
+            invoice.invoiceNumber.substringBeforeLast("-").ifBlank { "FEL-A" }
+        } else {
+            "FEL-A"
+        }
+        val dteNum = invoice.invoiceNumber.substringAfterLast("-", invoice.invoiceNumber)
+
+        baos.write(ESC_INIT)
+        baos.write(ALIGN_CENTER)
+        baos.write(BOLD_ON)
+        baos.write(SIZE_LARGE)
+        baos.write("${invoice.restaurantName}\n".toByteArray(Charsets.ISO_8859_1))
+        baos.write(BOLD_OFF)
+        baos.write(SIZE_NORMAL)
+
+        if (invoice.branchName.isNotBlank()) {
+            baos.write("Sucursal: ${invoice.branchName}\n".toByteArray(Charsets.ISO_8859_1))
+        }
+        baos.write("NIT Emisor: ${invoice.restaurantTaxId.ifBlank { "1234567-8" }}\n".toByteArray(Charsets.ISO_8859_1))
+        if (invoice.restaurantAddress.isNotBlank()) {
+            val addr = if (invoice.restaurantAddress.length > width) invoice.restaurantAddress.take(width - 3) + "..." else invoice.restaurantAddress
+            baos.write("$addr\n".toByteArray(Charsets.ISO_8859_1))
+        }
+        if (invoice.restaurantPhone.isNotBlank()) {
+            baos.write("Tel: ${invoice.restaurantPhone}\n".toByteArray(Charsets.ISO_8859_1))
+        }
+
+        baos.write(divider.toByteArray(Charsets.ISO_8859_1))
+        baos.write(BOLD_ON)
+        baos.write("DOCUMENTO TRIBUTARIO ELECTRONICO\n".toByteArray(Charsets.ISO_8859_1))
+        baos.write(SIZE_MEDIUM)
+        baos.write("FACTURA FEL\n".toByteArray(Charsets.ISO_8859_1))
+        baos.write(SIZE_NORMAL)
+        baos.write("SERIE: $serie | NO: $dteNum\n".toByteArray(Charsets.ISO_8859_1))
+        baos.write(BOLD_OFF)
+        baos.write("Fecha: $dateStr\n".toByteArray(Charsets.ISO_8859_1))
+        baos.write(divider.toByteArray(Charsets.ISO_8859_1))
+
+        baos.write(ALIGN_LEFT)
+        val clientName = when {
+            invoice.customerName.isNotBlank() -> invoice.customerName
+            invoice.customerType.isNotBlank() -> invoice.customerType
+            else -> "Consumidor Final"
+        }
+        baos.write("Cliente: $clientName\n".toByteArray(Charsets.ISO_8859_1))
+        baos.write("NIT: ${invoice.customerNit.ifBlank { "C/F" }}\n".toByteArray(Charsets.ISO_8859_1))
+        if (invoice.orderNumber.isNotBlank()) {
+            baos.write("Comanda: #${invoice.orderNumber}${if (invoice.tableNumber.isNotBlank()) " | Mesa: ${invoice.tableNumber}" else ""}\n".toByteArray(Charsets.ISO_8859_1))
+        }
+        baos.write("Cajero: ${invoice.cashierName} | Pago: ${invoice.paymentMethod}\n".toByteArray(Charsets.ISO_8859_1))
+        baos.write(divider.toByteArray(Charsets.ISO_8859_1))
+
+        baos.write(BOLD_ON)
+        if (is58mm) {
+            baos.write("CANT DESCRIPCION        TOTAL\n".toByteArray(Charsets.ISO_8859_1))
+        } else {
+            baos.write("CANT COD  DESCRIPCION            P.UNIT    TOTAL\n".toByteArray(Charsets.ISO_8859_1))
+        }
+        baos.write(BOLD_OFF)
+        baos.write(divider.toByteArray(Charsets.ISO_8859_1))
+
+        if (is58mm) {
+            for (item in items) {
+                val qtyStr = "${item.quantity}x".padEnd(4)
+                val priceStr = "$cur${String.format(Locale.US, "%.2f", item.subtotal)}".padStart(8)
+                val descWidth = width - qtyStr.length - priceStr.length
+                val descStr = if (item.productName.length > descWidth) item.productName.take(descWidth) else item.productName.padEnd(descWidth)
+                baos.write("$qtyStr$descStr$priceStr\n".toByteArray(Charsets.ISO_8859_1))
+                if (item.notes.isNotBlank()) {
+                    baos.write("   * ${item.notes.take(width - 5)}\n".toByteArray(Charsets.ISO_8859_1))
+                }
+            }
+        } else {
+            items.forEachIndexed { idx, item ->
+                val qtyStr = "${item.quantity}x".padEnd(4)
+                val codStr = "#${idx + 1}".padEnd(5)
+                val uPriceStr = "$cur${String.format(Locale.US, "%.2f", item.unitPrice)}".padStart(8)
+                val totStr = "$cur${String.format(Locale.US, "%.2f", item.subtotal)}".padStart(9)
+                val descW = width - (qtyStr.length + codStr.length + uPriceStr.length + totStr.length)
+                val descStr = if (item.productName.length > descW) item.productName.take(descW) else item.productName.padEnd(descW)
+                baos.write("$qtyStr$codStr$descStr$uPriceStr$totStr\n".toByteArray(Charsets.ISO_8859_1))
+                if (item.notes.isNotBlank()) {
+                    baos.write("     * ${item.notes.take(width - 7)}\n".toByteArray(Charsets.ISO_8859_1))
+                }
+            }
+        }
+
+        baos.write(divider.toByteArray(Charsets.ISO_8859_1))
+        val baseAmount = invoice.totalAmount / 1.12
+        val vatAmount = invoice.totalAmount - baseAmount
+
+        baos.write((formatLine("Subtotal:", "$cur${String.format(Locale.US, "%.2f", invoice.subtotal)}", width) + "\n").toByteArray(Charsets.ISO_8859_1))
+        if (invoice.discount > 0) {
+            baos.write((formatLine("Descuento:", "-$cur${String.format(Locale.US, "%.2f", invoice.discount)}", width) + "\n").toByteArray(Charsets.ISO_8859_1))
+        }
+        baos.write((formatLine("Base Imponible:", "$cur${String.format(Locale.US, "%.2f", baseAmount)}", width) + "\n").toByteArray(Charsets.ISO_8859_1))
+        baos.write((formatLine("IVA (12%):", "$cur${String.format(Locale.US, "%.2f", vatAmount)}", width) + "\n").toByteArray(Charsets.ISO_8859_1))
+        baos.write(doubleDivider.toByteArray(Charsets.ISO_8859_1))
+
+        baos.write(BOLD_ON)
+        baos.write(SIZE_MEDIUM)
+        baos.write((formatLine("TOTAL A PAGAR:", "$cur${String.format(Locale.US, "%.2f", invoice.totalAmount)}", width) + "\n").toByteArray(Charsets.ISO_8859_1))
+        baos.write(SIZE_NORMAL)
+        baos.write(BOLD_OFF)
+        baos.write(doubleDivider.toByteArray(Charsets.ISO_8859_1))
+
+        val totalWords = NumberToWordsHelper.toSpanishWords(invoice.totalAmount)
+        baos.write("TOTAL EN LETRAS:\n".toByteArray(Charsets.ISO_8859_1))
+        baos.write("$totalWords\n".toByteArray(Charsets.ISO_8859_1))
+        baos.write(divider.toByteArray(Charsets.ISO_8859_1))
+
+        baos.write(ALIGN_CENTER)
+        baos.write("CERTIFICACION SAT - FEL\n".toByteArray(Charsets.ISO_8859_1))
+        baos.write("INFILE S.A. NIT: 125543-9\n".toByteArray(Charsets.ISO_8859_1))
+        baos.write("Documento Tributario Electronico\n".toByteArray(Charsets.ISO_8859_1))
+        if (invoice.footerMessage.isNotBlank()) {
+            baos.write("${invoice.footerMessage}\n".toByteArray(Charsets.ISO_8859_1))
+        }
+        baos.write(FEED_PAPER)
+        baos.write(PAPER_CUT)
+
+        return baos.toByteArray()
+    }
+
+    private fun centerText(text: String, width: Int): String {
+        if (text.length >= width) return text.take(width)
+        val leftPadding = (width - text.length) / 2
+        return " ".repeat(leftPadding) + text
+    }
+
+    private fun formatLine(label: String, value: String, width: Int): String {
+        val spaces = (width - label.length - value.length).coerceAtLeast(1)
+        return label + " ".repeat(spaces) + value
     }
 
     // --- TRANSMISSION LOGIC ---

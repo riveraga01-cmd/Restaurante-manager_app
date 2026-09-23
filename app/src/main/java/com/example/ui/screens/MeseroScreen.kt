@@ -134,12 +134,18 @@ fun MeseroScreen(
         matchesCategory && matchesQuery
     }
 
+    val isFirestoreSyncActive by viewModel.isFirestoreSyncActive.collectAsState()
+    val syncStatusLabel by viewModel.syncStatusLabel.collectAsState()
+
     Scaffold(
         topBar = {
             ModuleTopBar(
                 title = "Módulo Mesero",
                 subtitle = "Mesero actual: $waiterName",
                 onBackClick = onBackToInicio,
+                isSyncActive = isFirestoreSyncActive,
+                syncStatusLabel = syncStatusLabel,
+                onSyncClick = { viewModel.triggerManualSync() },
                 actions = {
                     val isDarkTheme by viewModel.isDarkTheme.collectAsState()
                     IconButton(onClick = { viewModel.toggleDarkTheme() }) {
@@ -922,7 +928,38 @@ fun MeseroScreen(
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(14.dp))
+
+                if (!isFirestoreSyncActive) {
+                    Surface(
+                        color = Color(0xFFFEF3C7),
+                        shape = RoundedCornerShape(10.dp),
+                        border = BorderStroke(1.dp, Color(0xFFF59E0B)),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 12.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.WifiOff,
+                                contentDescription = null,
+                                tint = Color(0xFFB45309),
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Text(
+                                text = "Sin conexión a Firestore: Este pedido se guardará localmente en el dispositivo y se sincronizará automáticamente al reconectar.",
+                                style = MaterialTheme.typography.bodySmall.copy(
+                                    color = Color(0xFF92400E),
+                                    fontWeight = FontWeight.Medium
+                                )
+                            )
+                        }
+                    }
+                }
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -992,6 +1029,13 @@ fun MeseroScreen(
                                 showCartBottomSheet = false
                                 com.example.util.HapticHelper.triggerSuccessVibration(context)
                                 viewModel.submitOrderToKitchen {
+                                    if (!isFirestoreSyncActive) {
+                                        android.widget.Toast.makeText(
+                                            context,
+                                            "🛡️ Pedido guardado localmente de forma segura. Se sincronizará con Firestore al recuperar la conexión.",
+                                            android.widget.Toast.LENGTH_LONG
+                                        ).show()
+                                    }
                                     orderCustomerName = ""
                                     orderCustomerPhone = ""
                                     orderLocation = ""
@@ -1073,7 +1117,15 @@ fun MeseroScreen(
                         showLargeOrderConfirmation = false
                         showCartBottomSheet = false
                         com.example.util.HapticHelper.triggerSuccessVibration(context)
-                        viewModel.submitOrderToKitchen { }
+                        viewModel.submitOrderToKitchen {
+                            if (!isFirestoreSyncActive) {
+                                android.widget.Toast.makeText(
+                                    context,
+                                    "🛡️ Pedido guardado localmente de forma segura. Se sincronizará con Firestore al recuperar la conexión.",
+                                    android.widget.Toast.LENGTH_LONG
+                                ).show()
+                            }
+                        }
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = EmeraldSuccess),
                     modifier = Modifier.testTag("btn_confirmar_pedido_grande")
@@ -1507,6 +1559,12 @@ fun resolveTableStatus(tableName: String, allOrders: List<OrderEntity>, customSt
         if (customStatus?.equals("Reservada", ignoreCase = true) == true) {
             return Pair(TableStatusType.RESERVADA, null)
         }
+        if (customStatus?.equals("Ocupada", ignoreCase = true) == true) {
+            // Última orden asociada aunque ya esté pagada/cerrada, para mantener el contexto
+            val lastOrder = allOrders.filter { it.tableNumber.equals(tableName, ignoreCase = true) }
+                .maxByOrNull { it.createdAt }
+            return Pair(TableStatusType.OCUPADA, lastOrder)
+        }
         return Pair(TableStatusType.LIBRE, null)
     }
 
@@ -1635,7 +1693,8 @@ fun TableMapTabContent(
                 .padding(bottom = 16.dp)
         ) {
             items(filteredTables) { table ->
-                val (status, order) = resolveTableStatus(table.name, allOrders)
+                val entity = systemTables.find { it.tableNumber.equals(table.name, ignoreCase = true) }
+                val (status, order) = resolveTableStatus(table.name, allOrders, entity?.status)
                 val isSelected = selectedTable.equals(table.name, ignoreCase = true)
 
                 TableVisualCard(
@@ -1653,7 +1712,8 @@ fun TableMapTabContent(
 
     // Modal Table Detail Dialog
     selectedTableForDetail?.let { table ->
-        val (status, order) = resolveTableStatus(table.name, allOrders)
+        val entity = systemTables.find { it.tableNumber.equals(table.name, ignoreCase = true) }
+        val (status, order) = resolveTableStatus(table.name, allOrders, entity?.status)
         TableDetailDialog(
             table = table,
             status = status,
@@ -1670,6 +1730,9 @@ fun TableMapTabContent(
             },
             onPrintOrder = { ord ->
                 onPrintOrder(ord)
+                selectedTableForDetail = null
+            },
+            onTableFreed = {
                 selectedTableForDetail = null
             }
         )
@@ -1839,12 +1902,16 @@ fun TableDetailDialog(
     onDismiss: () -> Unit,
     onSelectAndNewOrder: () -> Unit,
     onViewActiveOrders: () -> Unit,
-    onPrintOrder: (OrderEntity) -> Unit
+    onPrintOrder: (OrderEntity) -> Unit,
+    onTableFreed: () -> Unit = {}
 ) {
     val itemsFlow = remember(order?.id) {
         if (order != null) viewModel.getOrderItemsFlow(order.id) else flowOf(emptyList())
     }
     val orderItems by itemsFlow.collectAsState(initial = emptyList())
+
+    var showReleaseConfirmDialog by remember { mutableStateOf(false) }
+    var releaseWarningMessage by remember { mutableStateOf<String?>(null) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -1914,6 +1981,19 @@ fun TableDetailDialog(
                                     )
                                 )
                             }
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text("Estado de Cobro:", style = MaterialTheme.typography.bodySmall)
+                                Text(
+                                    text = if (order.status == "PAGADO") "PAGADO ✓" else "PENDIENTE DE PAGO",
+                                    style = MaterialTheme.typography.bodySmall.copy(
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (order.status == "PAGADO") EmeraldSuccess else MaterialTheme.colorScheme.error
+                                    )
+                                )
+                            }
                         }
                     }
 
@@ -1953,6 +2033,37 @@ fun TableDetailDialog(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Botón destacado: "Cerrar Servicio / Liberar Mesa"
+                OutlinedButton(
+                    onClick = {
+                        showReleaseConfirmDialog = true
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("btn_cerrar_servicio_liberar_mesa"),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = if (status == TableStatusType.LIBRE) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.error
+                    ),
+                    border = BorderStroke(
+                        1.dp,
+                        if (status == TableStatusType.LIBRE) MaterialTheme.colorScheme.outline.copy(alpha = 0.5f) else MaterialTheme.colorScheme.error
+                    ),
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.MeetingRoom,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Cerrar Servicio / Liberar Mesa",
+                        fontWeight = FontWeight.Bold
+                    )
+                }
             }
         },
         confirmButton = {
@@ -1982,6 +2093,90 @@ fun TableDetailDialog(
             }
         }
     )
+
+    // Diálogo de Confirmación: "¿Deseas finalizar el servicio y liberar la Mesa X?"
+    if (showReleaseConfirmDialog) {
+        AlertDialog(
+            onDismissRequest = { showReleaseConfirmDialog = false },
+            icon = {
+                Icon(
+                    Icons.Default.HelpOutline,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(32.dp)
+                )
+            },
+            title = {
+                Text(
+                    text = "Finalizar Servicio",
+                    fontWeight = FontWeight.Bold
+                )
+            },
+            text = {
+                Text(
+                    text = "¿Deseas finalizar el servicio y liberar la ${table.name}?"
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showReleaseConfirmDialog = false
+                        viewModel.releaseTableService(table.name) { success, message ->
+                            if (success) {
+                                onTableFreed()
+                            } else {
+                                releaseWarningMessage = message
+                            }
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                ) {
+                    Text("Sí, Finalizar y Liberar")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showReleaseConfirmDialog = false }) {
+                    Text("Cancelar")
+                }
+            }
+        )
+    }
+
+    // Alerta de advertencia cuando existen consumos pendientes
+    if (releaseWarningMessage != null) {
+        AlertDialog(
+            onDismissRequest = { releaseWarningMessage = null },
+            icon = {
+                Icon(
+                    Icons.Default.Warning,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.size(32.dp)
+                )
+            },
+            title = {
+                Text(
+                    text = "Consumos Pendientes",
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.error
+                )
+            },
+            text = {
+                Text(
+                    text = releaseWarningMessage ?: "Hay consumos pendientes de cobro antes de liberar la mesa",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = { releaseWarningMessage = null },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("Entendido")
+                }
+            }
+        )
+    }
 }
 
 @Composable

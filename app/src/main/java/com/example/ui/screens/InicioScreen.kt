@@ -49,10 +49,12 @@ fun InicioScreen(
     val inTransitDeliveryOrders by viewModel.inTransitDeliveryOrders.collectAsState()
     val currentUser by viewModel.currentUser.collectAsState()
     val syncStatusLabel by viewModel.syncStatusLabel.collectAsState()
+    val isFirestoreSyncActive by viewModel.isFirestoreSyncActive.collectAsState()
     val isDarkTheme by viewModel.isDarkTheme.collectAsState()
     val allDeviceBindings by viewModel.allDeviceBindings.collectAsState()
     val accessRestrictedMessage by viewModel.accessRestrictedMessage.collectAsState()
 
+    var showOfflineDialog by remember { mutableStateOf(false) }
     var showPairDialog by remember { mutableStateOf(false) }
     var showAuthDialog by remember { mutableStateOf(false) }
     var codeInput by remember { mutableStateOf("") }
@@ -66,6 +68,11 @@ fun InicioScreen(
     val userInitials = if (!currentUser?.name.isNullOrEmpty()) {
         currentUser!!.name.split(" ").mapNotNull { it.firstOrNull() }.take(2).joinToString("").uppercase()
     } else "GP"
+
+    val isOffline = !isFirestoreSyncActive ||
+        syncStatusLabel == "Sin conexión" ||
+        syncStatusLabel == "Modo Local (Activo)" ||
+        syncStatusLabel.contains("Error", ignoreCase = true)
 
     Surface(
         modifier = Modifier.fillMaxSize(),
@@ -144,6 +151,37 @@ fun InicioScreen(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
+                        if (isOffline) {
+                            Surface(
+                                shape = RoundedCornerShape(16.dp),
+                                color = Color(0xFFFEF2F2),
+                                border = BorderStroke(1.dp, Color(0xFFEF4444)),
+                                modifier = Modifier
+                                    .clickable { showOfflineDialog = true }
+                                    .testTag("chip_offline_header")
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.WifiOff,
+                                        contentDescription = "Sin conexión a Firestore. Modo local.",
+                                        tint = Color(0xFFDC2626),
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Text(
+                                        text = "Modo Local",
+                                        style = MaterialTheme.typography.labelSmall.copy(
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color(0xFFDC2626)
+                                        )
+                                    )
+                                }
+                            }
+                        }
+
                         FilledTonalIconButton(
                             onClick = {
                                 HapticHelper.triggerLightClick(context)
@@ -239,6 +277,54 @@ fun InicioScreen(
                                 }
                             }
                         }
+                    }
+                }
+            }
+
+            // Visual notification banner when Firestore connection is offline
+            if (isOffline) {
+                Surface(
+                    color = Color(0xFFFEF3C7),
+                    border = BorderStroke(1.dp, Color(0xFFF59E0B).copy(alpha = 0.5f)),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { showOfflineDialog = true }
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 7.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.WifiOff,
+                                contentDescription = null,
+                                tint = Color(0xFFB45309),
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Text(
+                                text = "Sin conexión a Firestore: Los pedidos y cambios se guardan localmente en el dispositivo de forma segura.",
+                                style = MaterialTheme.typography.labelSmall.copy(
+                                    color = Color(0xFF92400E),
+                                    fontWeight = FontWeight.SemiBold
+                                ),
+                                maxLines = 1
+                            )
+                        }
+                        Text(
+                            text = "Info",
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                color = Color(0xFFB45309),
+                                fontWeight = FontWeight.Bold
+                            ),
+                            modifier = Modifier.padding(start = 6.dp)
+                        )
                     }
                 }
             }
@@ -521,6 +607,85 @@ fun InicioScreen(
         com.example.ui.components.FirebaseAuthDialog(
             viewModel = viewModel,
             onDismiss = { showAuthDialog = false }
+        )
+    }
+
+    if (showOfflineDialog) {
+        AlertDialog(
+            onDismissRequest = { showOfflineDialog = false },
+            icon = {
+                Surface(
+                    shape = CircleShape,
+                    color = Color(0xFFFEE2E2),
+                    modifier = Modifier.size(48.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = Icons.Default.WifiOff,
+                            contentDescription = null,
+                            tint = Color(0xFFDC2626),
+                            modifier = Modifier.size(28.dp)
+                        )
+                    }
+                }
+            },
+            title = {
+                Text(
+                    text = "Modo Local Activo (Sin Conexión)",
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                    textAlign = TextAlign.Center
+                )
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        text = "La conexión con Firestore no está disponible en este momento.",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Surface(
+                        color = Color(0xFFF0FDF4),
+                        shape = RoundedCornerShape(8.dp),
+                        border = BorderStroke(1.dp, Color(0xFF86EFAC)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(10.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(text = "🛡️", fontSize = 18.sp)
+                            Text(
+                                text = "El sistema sigue funcionando normalmente: los pedidos y cambios se guardan localmente en la base de datos de este dispositivo y se sincronizarán al recuperar la conexión.",
+                                style = MaterialTheme.typography.bodySmall.copy(
+                                    color = Color(0xFF166534),
+                                    fontWeight = FontWeight.Medium
+                                )
+                            )
+                        }
+                    }
+                    if (syncStatusLabel.isNotBlank()) {
+                        Text(
+                            text = "Estado reportado: $syncStatusLabel",
+                            style = MaterialTheme.typography.labelSmall.copy(color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        viewModel.triggerManualSync()
+                        showOfflineDialog = false
+                    }
+                ) {
+                    Text("Reintentar Conexión")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showOfflineDialog = false }) {
+                    Text("Cerrar")
+                }
+            }
         )
     }
 

@@ -93,17 +93,8 @@ fun DevicePairingDialog(
             isSubmitting = true
             pairMessage = null
 
-            // Clean QR payload if it is JSON
-            val effectiveCode = try {
-                if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
-                    val json = JSONObject(trimmed)
-                    json.optString("code", trimmed)
-                } else {
-                    trimmed
-                }
-            } catch (_: Exception) {
-                trimmed
-            }
+            // Clean QR payload if it is JSON, URL or plain code/pin
+            val effectiveCode = com.example.util.QRCodeHelper.extractPairingCode(trimmed)
 
             onPairWithCode(effectiveCode) { success, msg ->
                 isSubmitting = false
@@ -128,12 +119,14 @@ fun DevicePairingDialog(
             isProcessingScan = true
             pairMessage = "Analizando imagen de código QR seleccionada..."
 
-            // Try to match from available active bindings or parse name
-            if (allActiveBindings.isNotEmpty()) {
-                val latestBinding = allActiveBindings.first()
-                submitPairing(latestBinding.code)
+            val decodedQr = com.example.util.QRCodeHelper.decodeQrFromUri(context, uri)
+            if (!decodedQr.isNullOrBlank()) {
+                submitPairing(decodedQr)
             } else {
-                submitPairing(uri.lastPathSegment ?: "")
+                isProcessingScan = false
+                isPairSuccess = false
+                pairMessage = "No se detectó ningún código QR válido en la imagen seleccionada."
+                HapticHelper.triggerAlertVibration(context)
             }
         }
     }
@@ -281,65 +274,47 @@ fun DevicePairingDialog(
                                     }
                                 }
                             } else {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(210.dp)
-                                        .clip(RoundedCornerShape(16.dp))
-                                        .background(Color(0xFF0F172A))
-                                        .border(2.dp, if (isPairSuccess) EmeraldSuccess else BentoPrimary, RoundedCornerShape(16.dp)),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    // Camera Viewfinder Graphics
-                                    Column(
-                                        horizontalAlignment = Alignment.CenterHorizontally,
-                                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                                        modifier = Modifier.padding(16.dp)
+                                if (isPairSuccess) {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(220.dp)
+                                            .clip(RoundedCornerShape(16.dp))
+                                            .background(Color(0xFF0F172A))
+                                            .border(2.dp, EmeraldSuccess, RoundedCornerShape(16.dp)),
+                                        contentAlignment = Alignment.Center
                                     ) {
-                                        Icon(
-                                            imageVector = if (isPairSuccess) Icons.Default.CheckCircle else Icons.Default.CameraAlt,
-                                            contentDescription = null,
-                                            tint = if (isPairSuccess) EmeraldSuccess else Color.White,
-                                            modifier = Modifier.size(42.dp)
-                                        )
-                                        Text(
-                                            text = if (isPairSuccess) "¡QR Validado Correctamente!" else "Cámara del dispositivo lista. Enfoque el QR del Gerente",
-                                            style = MaterialTheme.typography.bodySmall.copy(color = Color.White, fontWeight = FontWeight.Medium),
-                                            textAlign = TextAlign.Center
-                                        )
-
-                                        if (isSubmitting || isProcessingScan) {
-                                            LinearProgressIndicator(
-                                                modifier = Modifier
-                                                    .fillMaxWidth(0.7f)
-                                                    .height(4.dp)
-                                                    .clip(RoundedCornerShape(2.dp)),
-                                                color = EmeraldSuccess
+                                        Column(
+                                            horizontalAlignment = Alignment.CenterHorizontally,
+                                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                                            modifier = Modifier.padding(16.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.CheckCircle,
+                                                contentDescription = null,
+                                                tint = EmeraldSuccess,
+                                                modifier = Modifier.size(52.dp)
+                                            )
+                                            Text(
+                                                text = "¡QR Validado y Dispositivo Vinculado!",
+                                                style = MaterialTheme.typography.titleSmall.copy(
+                                                    color = Color.White,
+                                                    fontWeight = FontWeight.Bold
+                                                ),
+                                                textAlign = TextAlign.Center
                                             )
                                         }
                                     }
-
-                                    // Animated Laser scanning beam
-                                    if (!isPairSuccess) {
-                                        Box(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .fillMaxHeight(0.04f)
-                                                .align(Alignment.TopCenter)
-                                                .offset(y = (200 * laserOffset).dp)
-                                                .background(
-                                                    Brush.horizontalGradient(
-                                                        listOf(
-                                                            Color.Transparent,
-                                                            EmeraldSuccess,
-                                                            Color.White,
-                                                            EmeraldSuccess,
-                                                            Color.Transparent
-                                                        )
-                                                    )
-                                                )
-                                        )
-                                    }
+                                } else {
+                                    CameraQrScannerView(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(220.dp),
+                                        isScanningActive = !isSubmitting && !isPairSuccess,
+                                        onQrCodeDetected = { scannedText ->
+                                            submitPairing(scannedText)
+                                        }
+                                    )
                                 }
                             }
 

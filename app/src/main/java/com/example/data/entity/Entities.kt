@@ -131,7 +131,7 @@ data class SystemSettingsEntity(
     val postalCode: String = "01001",
     val phoneSecondary: String = "+502 2345-6790",
     val whatsapp: String = "+502 5555-1234",
-    val website: String = "https://riveraga01-cmd.github.io/Restaurante-manager_app/",
+    val website: String = "https://riveraga01-cmd.github.io/Restaurante/",
     val facebook: String = "@RestauranteRiveraGT",
     val instagram: String = "@restaurante_rivera_gt",
     val openingHours: String = "Lunes a Domingo: 07:00 - 22:00",

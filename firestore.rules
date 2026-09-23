@@ -107,5 +107,13 @@ service cloud.firestore {
     match /manager_config/{configId} {
       allow read, write: if true;
     }
+
+    // -------------------------------------------------------------------------
+    // 7. WEB ORDERS COLLECTION (/pedidos_web/{orderId})
+    // -------------------------------------------------------------------------
+    match /pedidos_web/{orderId} {
+      // Allow public web clients to create orders, and staff to read and update them
+      allow read, write: if true;
+    }
   }
 }

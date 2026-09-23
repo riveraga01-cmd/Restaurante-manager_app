@@ -79,6 +79,8 @@ fun RepartidorScreen(
 
     // Active driver name prioritization
     val activeDriver = currentUser?.name ?: deliveryDriverName
+    val isFirestoreSyncActive by viewModel.isFirestoreSyncActive.collectAsState()
+    val syncStatusLabel by viewModel.syncStatusLabel.collectAsState()
 
     Scaffold(
         topBar = {
@@ -86,6 +88,9 @@ fun RepartidorScreen(
                 title = "Módulo Repartidor",
                 subtitle = "Repartidor: $activeDriver • En camino: ${inTransitOrders.size}",
                 onBackClick = onBackToInicio,
+                isSyncActive = isFirestoreSyncActive,
+                syncStatusLabel = syncStatusLabel,
+                onSyncClick = { viewModel.triggerManualSync() },
                 actions = {
                     IconButton(
                         onClick = { viewModel.toggleDarkTheme() },

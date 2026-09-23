@@ -240,6 +240,9 @@ interface RestaurantDao {
     @Query("SELECT * FROM device_bindings WHERE code = :code OR code LIKE '%' || :code || '%' LIMIT 1")
     suspend fun getDeviceBindingByCode(code: String): DeviceBindingEntity?
 
+    @Query("SELECT * FROM device_bindings")
+    suspend fun getAllDeviceBindingsDirect(): List<DeviceBindingEntity>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertDeviceBinding(binding: DeviceBindingEntity): Long
 
@@ -421,10 +424,10 @@ interface RestaurantDao {
     @Query("SELECT * FROM web_orders ORDER BY createdAt DESC")
     fun getAllWebOrders(): Flow<List<WebOrderEntity>>
 
-    @Query("SELECT * FROM web_orders WHERE status = 'Pendiente Validación' ORDER BY createdAt ASC")
+    @Query("SELECT * FROM web_orders WHERE status IN ('PENDIENTE_CONFIRMACION', 'PENDIENTE', 'Pendiente Validación') ORDER BY createdAt DESC")
     fun getPendingValidationWebOrders(): Flow<List<WebOrderEntity>>
 
-    @Query("SELECT * FROM web_orders WHERE status IN ('Pendiente Validación', 'En Cocina', 'Listo') ORDER BY createdAt DESC")
+    @Query("SELECT * FROM web_orders WHERE status IN ('PENDIENTE_CONFIRMACION', 'PENDIENTE', 'Pendiente Validación', 'EN_PREPARACION', 'En Cocina', 'Listo') ORDER BY createdAt DESC")
     fun getActiveWebOrders(): Flow<List<WebOrderEntity>>
 
     @Query("SELECT * FROM web_orders WHERE id = :id LIMIT 1")

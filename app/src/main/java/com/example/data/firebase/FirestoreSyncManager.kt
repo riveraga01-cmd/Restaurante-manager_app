@@ -1,6 +1,10 @@
 package com.example.data.firebase
 
 import android.content.Context
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
+import android.net.NetworkRequest
 import android.util.Log
 import com.example.data.dao.RestaurantDao
 import com.example.data.entity.*
@@ -8,8 +12,10 @@ import com.google.firebase.FirebaseApp
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
 import com.google.firebase.firestore.SetOptions
+import com.example.util.NotificationHelper
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -68,6 +74,13 @@ class FirestoreSyncManager(
     private val _pendingChangesCount = MutableStateFlow(0)
     val pendingChangesCount: StateFlow<Int> = _pendingChangesCount.asStateFlow()
 
+    private val _newPendingWebOrderAlert = MutableStateFlow<WebOrderEntity?>(null)
+    val newPendingWebOrderAlert: StateFlow<WebOrderEntity?> = _newPendingWebOrderAlert.asStateFlow()
+
+    fun clearPendingWebOrderAlert() {
+        _newPendingWebOrderAlert.value = null
+    }
+
     private var ordersListener: ListenerRegistration? = null
     private var menuListener: ListenerRegistration? = null
     private var productosListener: ListenerRegistration? = null
@@ -81,7 +94,40 @@ class FirestoreSyncManager(
     private var auditLogsListener: ListenerRegistration? = null
 
     init {
+        setupConnectivityMonitoring()
         startRealtimeSync()
+    }
+
+    private fun setupConnectivityMonitoring() {
+        context?.let { ctx ->
+            try {
+                val cm = ctx.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
+                if (cm != null) {
+                    val request = NetworkRequest.Builder()
+                        .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                        .build()
+                    cm.registerNetworkCallback(request, object : ConnectivityManager.NetworkCallback() {
+                        override fun onAvailable(network: Network) {
+                            externalScope.launch {
+                                Log.i("FirestoreSync", "Network connected: resuming Firestore live sync.")
+                                _syncStatusLabel.value = "Sincronizando"
+                                startRealtimeSync()
+                            }
+                        }
+
+                        override fun onLost(network: Network) {
+                            externalScope.launch {
+                                Log.w("FirestoreSync", "Network connection lost: switching to offline local storage.")
+                                _isLiveSyncActive.value = false
+                                _syncStatusLabel.value = "Sin conexión"
+                            }
+                        }
+                    })
+                }
+            } catch (e: Throwable) {
+                Log.w("FirestoreSync", "NetworkCallback registration note: ${e.message}")
+            }
+        }
     }
 
     fun startRealtimeSync() {
@@ -370,48 +416,122 @@ class FirestoreSyncManager(
                     externalScope.launch {
                         try {
                             for (doc in snapshot.documents) {
-                                val id = doc.getLong("id") ?: doc.id.hashCode().toLong().let { if (it < 0) -it else it }
-                                val webOrderId = doc.getString("webOrderId") ?: doc.id
-                                val origin = doc.getString("origin") ?: "QR_Mesa_1"
-                                val tableNumber = doc.getString("tableNumber") ?: "Mesa 1"
-                                val customerName = doc.getString("customerName") ?: "Cliente Web"
-                                val customerPhone = doc.getString("customerPhone") ?: ""
-                                val itemsJson = doc.getString("itemsJson") ?: "[]"
-                                val totalAmount = doc.getDouble("totalAmount") ?: 0.0
-                                val status = doc.getString("status") ?: "Pendiente Validación"
-                                val paymentMethod = doc.getString("paymentMethod") ?: "Efectivo al recibir"
-                                val notes = doc.getString("notes") ?: ""
-                                val createdAt = doc.getLong("createdAt") ?: System.currentTimeMillis()
+                                val rawId = doc.getString("id") ?: doc.id
+                                val numId = doc.getLong("id") ?: rawId.filter { it.isDigit() }.toLongOrNull() ?: doc.id.hashCode().toLong().let { if (it < 0) -it else it }
+                                val webOrderId = if (rawId.isNotBlank()) rawId else (doc.getString("webOrderId") ?: doc.id)
+
+                                val rawEstado = doc.getString("estado") ?: doc.getString("status") ?: "PENDIENTE_CONFIRMACION"
+                                val estado = when (rawEstado.trim().uppercase()) {
+                                    "PENDIENTE_CONFIRMACION", "PENDIENTE VALIDACIÓN", "PENDIENTE VALIDACION" -> "PENDIENTE_CONFIRMACION"
+                                    "EN_PREPARACION", "EN PREPARACION", "EN COCINA" -> "EN_PREPARACION"
+                                    "RECHAZADO", "CANCELADO" -> "RECHAZADO"
+                                    else -> rawEstado
+                                }
+
+                                val rawTipoPedido = doc.getString("tipoPedido") ?: ""
+                                val numMesa = doc.getString("numMesa") ?: doc.getString("mesa") ?: ""
+                                val isMesa = rawTipoPedido.equals("MESA", ignoreCase = true)
+                                    || numMesa.isNotBlank()
+                                    || (doc.getString("tipoServicio") ?: "").startsWith("Mesa", ignoreCase = true)
+                                    || (doc.getString("tipoServicio") ?: "").equals("MESA", ignoreCase = true)
+
+                                val origin = if (isMesa) {
+                                    if (numMesa.isNotBlank()) (if (numMesa.startsWith("Mesa", ignoreCase = true)) numMesa else "Mesa $numMesa")
+                                    else (doc.getString("tipoServicio") ?: "Mesa 1")
+                                } else {
+                                    "A Domicilio"
+                                }
+                                val tableNumber = origin
+
+                                val nombreCliente = doc.getString("nombreCliente") 
+                                    ?: doc.getString("customerName") 
+                                    ?: doc.getString("cliente") 
+                                    ?: ""
+                                val telefono = doc.getString("telefono") ?: doc.getString("customerPhone") ?: ""
+                                val ubicacionGps = doc.getString("ubicacionGps") ?: ""
+                                val direccionEscrita = doc.getString("direccionEscrita") ?: doc.getString("deliveryAddress") ?: ""
+                                val instruccionesCocina = doc.getString("instruccionesCocina") ?: doc.getString("notes") ?: ""
+
+                                val total = doc.getDouble("total") ?: doc.getDouble("totalAmount") ?: 0.0
+                                val paymentMethod = doc.getString("formaPago") 
+                                    ?: doc.getString("paymentMethod") 
+                                    ?: (if (isMesa) "En Mesa" else "Efectivo")
+                                val createdAt = doc.getLong("createdAt") ?: doc.getTimestamp("timestamp")?.toDate()?.time ?: System.currentTimeMillis()
                                 val validatedAt = doc.getLong("validatedAt")
                                 val posOrderId = doc.getLong("posOrderId")
-                                val deliveryAddress = doc.getString("deliveryAddress") ?: ""
-                                val deliveryDriverName = doc.getString("deliveryDriverName") ?: ""
-                                val deliveryStartedAt = doc.getLong("deliveryStartedAt")
-                                val deliveryFinishedAt = doc.getLong("deliveryFinishedAt")
-                                val deliveryIssueNote = doc.getString("deliveryIssueNote") ?: ""
+
+                                val itemsJson = when {
+                                    doc.contains("itemsJson") && !doc.getString("itemsJson").isNullOrBlank() -> doc.getString("itemsJson") ?: "[]"
+                                    doc.contains("items") -> {
+                                        val itemsList = doc.get("items")
+                                        if (itemsList is List<*>) {
+                                            val array = org.json.JSONArray()
+                                            for (item in itemsList) {
+                                                if (item is Map<*, *>) {
+                                                    array.put(org.json.JSONObject(item as Map<String, Any?>))
+                                                }
+                                            }
+                                            array.toString()
+                                        } else {
+                                            "[]"
+                                        }
+                                    }
+                                    else -> "[]"
+                                }
+
+                                val fullDeliveryAddress = buildString {
+                                    if (direccionEscrita.isNotBlank()) append(direccionEscrita)
+                                    if (ubicacionGps.isNotBlank()) {
+                                        if (isNotEmpty()) append(" | GPS: ")
+                                        append(ubicacionGps)
+                                    }
+                                }
+
+                                val existing = dao.getWebOrderByCode(webOrderId) ?: dao.getWebOrderById(numId)
+                                val isBrandNewPending = (existing == null && estado == "PENDIENTE_CONFIRMACION")
 
                                 val webOrder = WebOrderEntity(
-                                    id = id,
+                                    id = numId,
                                     webOrderId = webOrderId,
                                     origin = origin,
                                     tableNumber = tableNumber,
-                                    customerName = customerName,
-                                    customerPhone = customerPhone,
+                                    customerName = if (nombreCliente.isNotBlank()) nombreCliente else (if (isMesa) tableNumber else "Cliente Web"),
+                                    customerPhone = telefono,
                                     itemsJson = itemsJson,
-                                    totalAmount = totalAmount,
-                                    status = status,
+                                    totalAmount = total,
+                                    status = estado,
                                     paymentMethod = paymentMethod,
-                                    notes = notes,
+                                    notes = instruccionesCocina,
                                     createdAt = createdAt,
                                     validatedAt = validatedAt,
                                     posOrderId = posOrderId,
-                                    deliveryAddress = deliveryAddress,
-                                    deliveryDriverName = deliveryDriverName,
-                                    deliveryStartedAt = deliveryStartedAt,
-                                    deliveryFinishedAt = deliveryFinishedAt,
-                                    deliveryIssueNote = deliveryIssueNote
+                                    deliveryAddress = fullDeliveryAddress,
+                                    deliveryDriverName = doc.getString("deliveryDriverName") ?: "",
+                                    deliveryStartedAt = doc.getLong("deliveryStartedAt"),
+                                    deliveryFinishedAt = doc.getLong("deliveryFinishedAt"),
+                                    deliveryIssueNote = doc.getString("deliveryIssueNote") ?: ""
                                 )
                                 dao.insertWebOrder(webOrder)
+
+                                if (isBrandNewPending) {
+                                    context?.let { ctx ->
+                                        withContext(Dispatchers.Main) {
+                                            NotificationHelper.playOrderAlertChime(ctx)
+                                            NotificationHelper.triggerVibration(ctx)
+                                            val origenDesc = if (isMesa) origin else "Domicilio"
+                                            NotificationHelper.showWebOrderNotification(
+                                                context = ctx,
+                                                title = "¡Nuevo Pedido Web Recibido! ($origenDesc)",
+                                                body = "Pedido $webOrderId de ${webOrder.customerName} ($origenDesc) - Total: Q${"%.2f".format(total)}",
+                                                orderId = numId,
+                                                tableNumber = origin,
+                                                enableSound = true,
+                                                enableVibration = true
+                                            )
+                                            _newPendingWebOrderAlert.value = webOrder
+                                        }
+                                    }
+                                }
                             }
                             _lastSyncTimestamp.value = System.currentTimeMillis()
                         } catch (e: Exception) {
@@ -555,21 +675,53 @@ class FirestoreSyncManager(
         externalScope.launch {
             val db = firestore ?: return@launch
             try {
+                val cleanCode = binding.code.trim().uppercase()
+                val pinPart = cleanCode.substringAfterLast("-", "").trim().let {
+                    if (it.all { ch -> ch.isDigit() } && it.length in 4..6) it else ""
+                }
                 val map = hashMapOf(
                     "id" to binding.id,
-                    "code" to binding.code,
+                    "code" to cleanCode,
+                    "pin" to pinPart,
                     "branchName" to binding.branchName,
                     "assignedRole" to binding.assignedRole,
                     "expiresAt" to binding.expiresAt,
                     "isMultiUse" to binding.isMultiUse,
+                    "usedCount" to binding.usedCount,
+                    "createdAt" to binding.createdAt,
                     "createdByUser" to binding.createdByUser
                 )
+                // Direct key by code for O(1) multi-device matching
                 db.collection("device_bindings")
-                    .document(binding.id.toString())
+                    .document(cleanCode)
                     .set(map, SetOptions.merge())
                     .await()
+
+                if (binding.id != 0L) {
+                    db.collection("device_bindings")
+                        .document(binding.id.toString())
+                        .set(map, SetOptions.merge())
+                        .await()
+                }
             } catch (e: Exception) {
                 Log.e("FirestoreSync", "Failed to sync device binding: ${e.message}")
+            }
+        }
+    }
+
+    fun deleteDeviceBindingFromRemote(code: String, id: Long = 0L) {
+        externalScope.launch {
+            val db = firestore ?: return@launch
+            try {
+                val cleanCode = code.trim().uppercase()
+                if (cleanCode.isNotEmpty()) {
+                    db.collection("device_bindings").document(cleanCode).delete().await()
+                }
+                if (id != 0L) {
+                    db.collection("device_bindings").document(id.toString()).delete().await()
+                }
+            } catch (e: Exception) {
+                Log.e("FirestoreSync", "Failed to delete device binding from remote: ${e.message}")
             }
         }
     }
@@ -594,6 +746,111 @@ class FirestoreSyncManager(
                     .await()
             } catch (e: Exception) {
                 Log.e("FirestoreSync", "Failed to sync linked device: ${e.message}")
+            }
+        }
+    }
+
+    suspend fun fetchDeviceBindingByCodeOrPin(input: String): DeviceBindingEntity? {
+        val db = firestore ?: return null
+        return try {
+            val cleanInput = input.trim().uppercase()
+            val digitsOnly = cleanInput.filter { it.isDigit() }
+            val pinCandidate = cleanInput.substringAfterLast("-", "").trim()
+            val effectivePin = if (digitsOnly.length in 4..6) digitsOnly else if (pinCandidate.all { it.isDigit() } && pinCandidate.length in 4..6) pinCandidate else ""
+
+            val col = db.collection("device_bindings")
+
+            // 1. Direct document lookup by cleanInput
+            if (cleanInput.isNotEmpty()) {
+                val doc = col.document(cleanInput).get().await()
+                if (doc.exists()) {
+                    val binding = parseDeviceBindingFromDoc(doc)
+                    if (binding != null) return binding
+                }
+            }
+
+            // 2. Query by code
+            if (cleanInput.isNotEmpty()) {
+                val byCode = col.whereEqualTo("code", cleanInput).get().await()
+                if (!byCode.isEmpty) {
+                    val binding = parseDeviceBindingFromDoc(byCode.documents[0])
+                    if (binding != null) return binding
+                }
+            }
+
+            // 3. Query by pin if input is or contains a 4-6 digit pin
+            if (effectivePin.isNotEmpty()) {
+                val byPin = col.whereEqualTo("pin", effectivePin).get().await()
+                for (doc in byPin.documents) {
+                    val binding = parseDeviceBindingFromDoc(doc)
+                    if (binding != null) return binding
+                }
+            }
+
+            // 4. Fallback: scan all documents in device_bindings for prefix/suffix match
+            val allDocs = col.get().await()
+            for (doc in allDocs.documents) {
+                val docCode = (doc.getString("code") ?: doc.id).trim().uppercase()
+                val docPin = (doc.getString("pin") ?: docCode.substringAfterLast("-")).trim()
+
+                val isDirectMatch = (docCode == cleanInput) ||
+                        (effectivePin.isNotEmpty() && docPin == effectivePin) ||
+                        (effectivePin.isNotEmpty() && docCode.endsWith("-$effectivePin")) ||
+                        (effectivePin.isNotEmpty() && docCode.contains(effectivePin)) ||
+                        (cleanInput.isNotEmpty() && docCode.contains(cleanInput)) ||
+                        (cleanInput.isNotEmpty() && cleanInput.contains(docCode))
+
+                if (isDirectMatch) {
+                    val binding = parseDeviceBindingFromDoc(doc)
+                    if (binding != null) return binding
+                }
+            }
+            null
+        } catch (e: Exception) {
+            Log.e("FirestoreSync", "Error fetching device binding from Firestore: ${e.message}")
+            null
+        }
+    }
+
+    private fun parseDeviceBindingFromDoc(doc: com.google.firebase.firestore.DocumentSnapshot): DeviceBindingEntity? {
+        return try {
+            val code = doc.getString("code") ?: if (doc.id.contains("RIVERA")) doc.id else return null
+            val id = doc.getLong("id") ?: doc.id.toLongOrNull() ?: doc.id.hashCode().toLong().let { if (it < 0) -it else it }
+            val branch = doc.getString("branchName") ?: "Sucursal Central"
+            val role = doc.getString("assignedRole") ?: "MESERO"
+            val expiresAt = doc.getLong("expiresAt") ?: (System.currentTimeMillis() + 86400000L)
+            val isMultiUse = doc.getBoolean("isMultiUse") ?: true
+            val usedCount = doc.getLong("usedCount")?.toInt() ?: 0
+            val createdAt = doc.getLong("createdAt") ?: System.currentTimeMillis()
+            val createdByUser = doc.getString("createdByUser") ?: "Gerente Principal"
+
+            DeviceBindingEntity(
+                id = id,
+                code = code,
+                branchName = branch,
+                assignedRole = role,
+                expiresAt = expiresAt,
+                isMultiUse = isMultiUse,
+                usedCount = usedCount,
+                createdAt = createdAt,
+                createdByUser = createdByUser
+            )
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    suspend fun fetchDeviceBindingByCode(codeToMatch: String): DeviceBindingEntity? {
+        return fetchDeviceBindingByCodeOrPin(codeToMatch)
+    }
+
+    fun deleteLinkedDeviceFromRemote(deviceId: String) {
+        externalScope.launch {
+            val db = firestore ?: return@launch
+            try {
+                db.collection("linked_devices").document(deviceId).delete().await()
+            } catch (e: Exception) {
+                Log.e("FirestoreSync", "Error deleting linked device: ${e.message}")
             }
         }
     }
@@ -689,16 +946,21 @@ class FirestoreSyncManager(
     private fun listenToDeviceBindings(db: FirebaseFirestore) {
         bindingsListener = db.collection("device_bindings")
             .addSnapshotListener { snapshot, error ->
-                if (error != null || snapshot == null || snapshot.isEmpty) return@addSnapshotListener
+                if (error != null || snapshot == null) return@addSnapshotListener
                 externalScope.launch {
                     try {
                         for (doc in snapshot.documents) {
-                            val id = doc.getLong("id") ?: doc.id.toLongOrNull() ?: continue
-                            val code = doc.getString("code") ?: continue
+                            val code = doc.getString("code") ?: if (doc.id.contains("RIVERA")) doc.id else continue
                             val branch = doc.getString("branchName") ?: "Sucursal Central"
                             val role = doc.getString("assignedRole") ?: "MESERO"
-                            val expiresAt = doc.getLong("expiresAt") ?: (System.currentTimeMillis() + 86400000)
-                            val isMultiUse = doc.getBoolean("isMultiUse") ?: false
+                            val expiresAt = doc.getLong("expiresAt") ?: (System.currentTimeMillis() + 86400000L)
+                            val isMultiUse = doc.getBoolean("isMultiUse") ?: true
+                            val usedCount = doc.getLong("usedCount")?.toInt() ?: 0
+                            val createdAt = doc.getLong("createdAt") ?: System.currentTimeMillis()
+                            val createdByUser = doc.getString("createdByUser") ?: "Gerente Principal"
+
+                            val existing = dao.getDeviceBindingByCode(code)
+                            val id = existing?.id ?: doc.getLong("id") ?: doc.id.toLongOrNull() ?: doc.id.hashCode().toLong().let { if (it < 0) -it else it }
 
                             dao.insertDeviceBinding(
                                 DeviceBindingEntity(
@@ -707,7 +969,10 @@ class FirestoreSyncManager(
                                     branchName = branch,
                                     assignedRole = role,
                                     expiresAt = expiresAt,
-                                    isMultiUse = isMultiUse
+                                    isMultiUse = isMultiUse,
+                                    usedCount = usedCount,
+                                    createdAt = createdAt,
+                                    createdByUser = createdByUser
                                 )
                             )
                         }
@@ -933,9 +1198,15 @@ class FirestoreSyncManager(
                     .set(orderMap, SetOptions.merge())
                     .await()
 
+                _isLiveSyncActive.value = true
+                _syncStatusLabel.value = "Sincronizado"
+                _syncError.value = null
                 _lastSyncTimestamp.value = System.currentTimeMillis()
             } catch (e: Exception) {
                 Log.e("FirestoreSync", "Failed to push order #${order.id} to Firestore: ${e.message}")
+                _isLiveSyncActive.value = false
+                _syncStatusLabel.value = "Modo Local (Activo)"
+                _syncError.value = "Fallo de conexión a Firestore: ${e.message}"
             }
         }
     }
@@ -1036,6 +1307,7 @@ class FirestoreSyncManager(
             val db = firestore ?: return@launch
             try {
                 val updateMap = mutableMapOf<String, Any>(
+                    "estado" to newStatus,
                     "status" to newStatus,
                     "validatedAt" to System.currentTimeMillis()
                 )

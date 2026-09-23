@@ -889,7 +889,7 @@ fun AddEditThemeDialog(
                                 .background(parseHexColor(primaryHex)),
                             contentAlignment = Alignment.Center
                         ) {
-                            Text("🌐 https://riveraga01-cmd.github.io/Restaurante-manager_app/", color = Color.White.copy(alpha = 0.8f), fontSize = 10.sp)
+                            Text("🌐 https://riveraga01-cmd.github.io/Restaurante/", color = Color.White.copy(alpha = 0.8f), fontSize = 10.sp)
                         }
 
                         // Banner Hero

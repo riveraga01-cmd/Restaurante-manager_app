@@ -77,12 +77,18 @@ fun CajaScreen(
     val cardSalesToday = allSales.filter { it.paymentMethod == "Tarjeta" }.sumOf { it.total }
     val transferSalesToday = allSales.filter { it.paymentMethod == "Transferencia" }.sumOf { it.total }
 
+    val isFirestoreSyncActive by viewModel.isFirestoreSyncActive.collectAsState()
+    val syncStatusLabel by viewModel.syncStatusLabel.collectAsState()
+
     Scaffold(
         topBar = {
             ModuleTopBar(
                 title = "Módulo Caja",
                 subtitle = "Cajero: $cashierName • Por cobrar: ${cashierOrders.size} pedidos",
                 onBackClick = onBackToInicio,
+                isSyncActive = isFirestoreSyncActive,
+                syncStatusLabel = syncStatusLabel,
+                onSyncClick = { viewModel.triggerManualSync() },
                 actions = {
                     val isDarkTheme by viewModel.isDarkTheme.collectAsState()
                     IconButton(onClick = { viewModel.toggleDarkTheme() }) {
@@ -780,6 +786,7 @@ fun CajaScreen(
             onConfirmPayment = {
                 com.example.util.HapticHelper.triggerSuccessVibration(context)
                 viewModel.processOrderPayment(order.id) { }
+                viewModel.setSelectedPaymentOrder(null)
             },
             onPrintTicket = { data ->
                 ticketToPrint = data

@@ -9,6 +9,53 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Playfair+Display:wght@700;800&display=swap" rel="stylesheet">
     
+    <!-- Script de redirección inteligente anti-404 para GitHub Pages -->
+    <script>
+        (function() {
+            var loc = window.location;
+            var pathname = loc.pathname || '';
+            var search = loc.search || '';
+            var hash = loc.hash || '';
+
+            // Mecanismo anti-bucles con sessionStorage
+            var redirectKey = 'rivera_redirect_count';
+            var redirectCount = parseInt(sessionStorage.getItem(redirectKey) || '0', 10);
+            var now = Date.now();
+            var lastTime = parseInt(sessionStorage.getItem('rivera_redirect_time') || '0', 10);
+            if (now - lastTime > 15000) {
+                redirectCount = 0;
+            }
+
+            if (redirectCount < 2) {
+                // Caso 1: Acceso desde Restaurante-manager_app -> Redirigir a /Restaurante/
+                if (pathname.indexOf('/Restaurante-manager_app') !== -1) {
+                    sessionStorage.setItem(redirectKey, String(redirectCount + 1));
+                    sessionStorage.setItem('rivera_redirect_time', String(now));
+                    var newPath = pathname.replace('/Restaurante-manager_app', '/Restaurante');
+                    if (!newPath.endsWith('/') && !newPath.includes('.')) newPath += '/';
+                    loc.replace(loc.origin + newPath + search + hash);
+                    return;
+                }
+
+                // Caso 2: Acceso a /Restaurante sin barra final -> Redirigir a /Restaurante/
+                if (pathname === '/Restaurante') {
+                    sessionStorage.setItem(redirectKey, String(redirectCount + 1));
+                    sessionStorage.setItem('rivera_redirect_time', String(now));
+                    loc.replace(loc.origin + '/Restaurante/' + search + hash);
+                    return;
+                }
+
+                // Caso 3: Acceso a la raíz riveraga01-cmd.github.io/ -> Redirigir a /Restaurante/
+                if (pathname === '/' || pathname === '') {
+                    sessionStorage.setItem(redirectKey, String(redirectCount + 1));
+                    sessionStorage.setItem('rivera_redirect_time', String(now));
+                    loc.replace(loc.origin + '/Restaurante/' + search + hash);
+                    return;
+                }
+            }
+        })();
+    </script>
+
     <!-- Firebase App & Firestore JS SDK (Modular Compat) -->
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
@@ -53,6 +100,49 @@
             margin: 0 auto;
             position: relative;
             box-shadow: 0 0 35px rgba(0,0,0,0.06);
+        }
+
+        /* Aviso Anti-404 / Selector de Ruta */
+        .recovery-banner {
+            background: linear-gradient(135deg, #1E3A8A, #2563EB);
+            color: white;
+            padding: 12px 16px;
+            margin: 12px 16px 0 16px;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(37, 99, 235, 0.25);
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            font-size: 13px;
+        }
+
+        .recovery-banner-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-weight: 800;
+        }
+
+        .recovery-banner-actions {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .recovery-btn {
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            text-decoration: none;
+            padding: 4px 10px;
+            border-radius: 16px;
+            font-size: 11px;
+            font-weight: 700;
+            transition: background 0.2s ease;
+        }
+
+        .recovery-btn.primary {
+            background: white;
+            color: #1E3A8A;
         }
 
         /* Top Header Bar */
@@ -142,35 +232,35 @@
             transition: background 0.4s ease;
         }
 
-        .hero-bg-img {
+        .hero-img {
             width: 100%;
             height: 100%;
             object-fit: cover;
-            object-position: center;
+            opacity: 0.82;
             transition: opacity 0.5s ease;
         }
 
         .hero-overlay {
             position: absolute;
             inset: 0;
-            background: linear-gradient(180deg, rgba(0,0,0,0.1) 0%, rgba(0,0,0,0.85) 100%);
+            background: linear-gradient(180deg, rgba(0,0,0,0.15) 0%, rgba(15, 23, 42, 0.85) 100%);
             display: flex;
             flex-direction: column;
             justify-content: flex-end;
-            padding: 18px 16px;
-            color: #FFFFFF;
+            padding: 20px 18px;
+            color: white;
         }
 
-        .hero-tag {
-            align-self: flex-start;
+        .hero-badge-tag {
             background: var(--secondary-color);
             color: white;
             font-size: 11px;
-            font-weight: 700;
+            font-weight: 800;
             text-transform: uppercase;
             letter-spacing: 0.5px;
             padding: 3px 8px;
             border-radius: 6px;
+            width: fit-content;
             margin-bottom: 6px;
             box-shadow: 0 2px 4px rgba(0,0,0,0.2);
             transition: background 0.3s ease;
@@ -180,7 +270,7 @@
             font-family: 'Playfair Display', serif;
             font-size: 22px;
             font-weight: 800;
-            line-height: 1.2;
+            line-height: 1.25;
             margin-bottom: 4px;
         }
 
@@ -236,9 +326,8 @@
             display: flex;
             gap: 8px;
             overflow-x: auto;
+            padding-bottom: 6px;
             scrollbar-width: none;
-            -ms-overflow-style: none;
-            padding-bottom: 4px;
         }
 
         .categories-scroll::-webkit-scrollbar {
@@ -246,11 +335,11 @@
         }
 
         .category-chip {
-            flex-shrink: 0;
             padding: 7px 14px;
             border-radius: 20px;
             font-size: 13px;
             font-weight: 600;
+            white-space: nowrap;
             background: var(--surface-color);
             color: var(--text-main);
             border: 1px solid var(--border-color);
@@ -688,62 +777,36 @@
             transform: scale(0.98);
         }
 
-        /* Success Screen State */
-        .success-card {
+        .header-servicio-mesa {
+            background: linear-gradient(135deg, var(--primary-color), var(--primary-light));
+            color: #FFFFFF;
+            border-radius: 12px;
+            padding: 14px 16px;
+            margin-bottom: 16px;
+            font-size: 16px;
+            font-weight: 800;
             text-align: center;
-            padding: 24px 16px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 12px;
-        }
-
-        .success-icon-box {
-            width: 64px;
-            height: 64px;
-            border-radius: 50%;
-            background: #DCFCE7;
-            color: #16A34A;
+            box-shadow: var(--shadow-sm);
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 32px;
         }
 
-        .badge-status-pending {
-            background: #FEF3C7;
-            color: #92400E;
-            border: 1px solid #FCD34D;
-            padding: 6px 14px;
-            border-radius: 20px;
-            font-size: 13px;
-            font-weight: 700;
-        }
-
-        .btn-whatsapp-share {
-            background: #25D366;
+        .btn-gps {
+            background: var(--secondary-color);
             color: white;
             border: none;
-            padding: 12px 18px;
+            padding: 0 14px;
             border-radius: 10px;
-            font-size: 14px;
+            font-size: 13px;
             font-weight: 700;
+            cursor: pointer;
             display: flex;
             align-items: center;
-            gap: 8px;
-            text-decoration: none;
-            box-shadow: 0 2px 6px rgba(37, 211, 102, 0.3);
-            margin-top: 6px;
+            gap: 4px;
+            white-space: nowrap;
         }
 
-        /* Empty state */
-        .empty-catalog {
-            text-align: center;
-            padding: 48px 20px;
-            color: var(--text-muted);
-        }
-
-        /* Prominent Mesa / Domicilio Notice Banner */
         .prominent-mesa-banner {
             background: linear-gradient(135deg, #1E3A8A 0%, #2563EB 100%);
             color: white;
@@ -754,7 +817,6 @@
             align-items: center;
             justify-content: space-between;
             box-shadow: 0 4px 14px rgba(37, 99, 235, 0.25);
-            animation: fadeIn 0.3s ease;
         }
 
         .prominent-mesa-content {
@@ -781,85 +843,59 @@
             font-weight: 700;
             text-transform: uppercase;
         }
-
-        .modal-mesa-notice {
-            background: #EFF6FF;
-            border: 1px solid #BFDBFE;
-            border-radius: 12px;
-            padding: 12px 14px;
-            margin-bottom: 16px;
-            color: #1E3A8A;
-            font-size: 14px;
-        }
-
-        .header-servicio-mesa {
-            background: linear-gradient(135deg, var(--primary-color), var(--primary-light));
-            color: #FFFFFF;
-            border-radius: 12px;
-            padding: 14px 16px;
-            margin-bottom: 16px;
-            font-size: 16px;
-            font-weight: 800;
-            text-align: center;
-            box-shadow: var(--shadow-sm);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 8px;
-        }
-
-        .btn-gps {
-            background: var(--primary-color);
-            color: white;
-            border: none;
-            border-radius: 10px;
-            padding: 0 14px;
-            cursor: pointer;
-            font-size: 13px;
-            font-weight: 700;
-            display: flex;
-            align-items: center;
-            gap: 4px;
-            transition: all 0.2s;
-        }
-        .btn-gps:hover {
-            opacity: 0.9;
-        }
     </style>
 </head>
 <body>
 
-    <!-- Top Navigation Header -->
+    <!-- Aviso de Recuperación / Redirección Rápida -->
+    <div class="recovery-banner" id="recoveryBanner">
+        <div class="recovery-banner-header">
+            <span>🍽️ Restaurante Rivera - Menú Digital</span>
+            <span style="font-size: 11px; opacity: 0.85;">Menú en Línea</span>
+        </div>
+        <div style="opacity: 0.95;">
+            Si ingresaste por un enlace anterior o recibiste error 404, utiliza estos accesos directos:
+        </div>
+        <div class="recovery-banner-actions">
+            <a href="/Restaurante/" class="recovery-btn primary" id="btnRecovMain">📍 Menú en /Restaurante/</a>
+            <a href="/" class="recovery-btn" id="btnRecovRoot">🏠 Menú Principal</a>
+        </div>
+    </div>
+
+    <!-- Top Navigation Bar -->
     <header class="top-navbar">
         <div class="brand-info">
             <div class="brand-logo-badge">🍽️</div>
             <div class="brand-text">
-                <h1 id="restaurantNameLabel">Restaurante Rivera</h1>
-                <p><span class="live-dot"></span> Menú en tiempo real</p>
+                <h1 id="themeTitle">Restaurante Rivera</h1>
+                <p><span class="live-dot"></span> <span id="themeWelcome">Menú Digital en Tiempo Real</span></p>
             </div>
         </div>
-
-        <div id="tableDisplayPill" class="table-pill">
-            <span>📍</span> <span id="tableLabel">Mesa 1</span>
+        <div class="table-pill" id="tablePill">
+            <span>📍</span>
+            <span id="tableLabel">A Domicilio</span>
         </div>
     </header>
 
-    <!-- Prominent Mesa / Domicilio Banner -->
+    <!-- Banner Destacado Mesa / Domicilio -->
     <div id="prominentMesaBanner" class="prominent-mesa-banner" style="display: none;">
         <div class="prominent-mesa-content">
-            <span class="prominent-mesa-icon">🪑</span>
-            <span id="prominentMesaText" class="prominent-mesa-text">Ordenando desde: Mesa 1</span>
+            <span class="prominent-mesa-icon">🍽️</span>
+            <div>
+                <div class="prominent-mesa-text" id="prominentMesaText">Ordenando desde: Mesa 1</div>
+                <div style="font-size: 12px; opacity: 0.9;">Tu comanda irá directo a meseros y cocina</div>
+            </div>
         </div>
-        <span class="prominent-mesa-badge">Menú Activo</span>
+        <div class="prominent-mesa-badge" id="prominentMesaBadge">En Mesa</div>
     </div>
 
-    <!-- Dynamic Theme Hero Banner -->
-    <section class="hero-banner" id="heroBanner">
-        <img id="bannerImage" class="hero-bg-img" src="https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&q=80" alt="Banner Menú" onerror="this.src='https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=800&q=80'">
+    <!-- Dynamic Hero Banner -->
+    <section class="hero-banner">
+        <img class="hero-img" id="bannerImage" src="images/cat_fuertes.jpg" onerror="this.src='https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=800&q=80'" alt="Banner Restaurante Rivera">
         <div class="hero-overlay">
-            <span class="hero-tag" id="themeTag">Especial de la Casa</span>
-            <h2 class="hero-title" id="themeTitle">Auténtica Gastronomía</h2>
-            <p class="hero-welcome" id="themeWelcome">Bienvenidos. Selecciona tus platillos y bebidas favoritas para enviar tu pedido directamente a la cocina.</p>
+            <span class="hero-badge-tag" id="themeTag">Especialidades Típicas</span>
+            <h2 class="hero-title">Sabor Artesanal & Tradición</h2>
+            <p class="hero-welcome">Platillos preparados con ingredientes frescos y recetas ancestrales.</p>
         </div>
     </section>
 
@@ -869,7 +905,6 @@
             <span class="search-icon">🔍</span>
             <input type="text" id="searchInput" class="search-input" placeholder="Buscar platillos, bebidas, postres...">
         </div>
-
         <div class="categories-scroll" id="categoriesBar">
             <button class="category-chip active" data-cat="Todos">Todos</button>
             <button class="category-chip" data-cat="Platillos">Platillos</button>
@@ -881,8 +916,8 @@
 
     <!-- Products Catalog Grid -->
     <main class="products-container" id="productsContainer">
-        <!-- Products dynamically rendered here -->
-        <div class="empty-catalog">
+        <div class="empty-catalog" style="text-align: center; padding: 40px 20px; color: var(--text-muted);">
+            <p style="font-size: 36px; margin-bottom: 8px;">🍽️</p>
             <p>Cargando menú en tiempo real...</p>
         </div>
     </main>
@@ -901,43 +936,34 @@
         </div>
     </div>
 
-    <!-- Cart Modal Drawer -->
+    <!-- Modal Cart Drawer -->
     <div class="modal-backdrop" id="modalBackdrop" onclick="closeCartModal()"></div>
     <div class="cart-modal" id="cartModal">
         <div class="modal-header">
-            <h2>🛒 Tu Pedido</h2>
+            <h2>Tu Pedido</h2>
             <button class="btn-close-modal" onclick="closeCartModal()">✕</button>
         </div>
-
+        
         <div class="modal-body" id="modalBody">
-            <!-- Encabezado Destacado Servicio en Mesa (Solo Caso A: Mesa) -->
             <div id="headerServicioMesa" class="header-servicio-mesa" style="display: none;">
-                🍽️ Servicio en <span id="numMesaSpan">Mesa 1</span>
+                🍽️ Servicio en Mesa <span id="numMesaSpan" style="margin-left: 4px;">1</span>
             </div>
 
-            <div id="modalMesaNotice" class="modal-mesa-notice" style="display: none;"></div>
-
-            <!-- 1. Platillos (Lista de productos seleccionados con botones de cantidad + / -) -->
             <div class="form-group" id="groupCartItems">
-                <label style="font-size: 14px; font-weight: 800; color: var(--text-main);">1. Platillos Seleccionados</label>
-                <div class="cart-items-list" id="cartItemsList">
-                    <!-- Items list rendered here -->
-                </div>
+                <label>Platillos seleccionados</label>
+                <div class="cart-items-list" id="cartItemsList"></div>
             </div>
 
-            <!-- 2. Nombre de quien ordena (Campo obligatorio en Domicilio) -->
             <div class="form-group" id="groupCustomerName">
                 <label for="nombre">Nombre de quien ordena *</label>
                 <input type="text" id="nombre" class="form-input" placeholder="Ej. Carlos Rivera" required>
             </div>
 
-            <!-- 3. Teléfono / WhatsApp (Campo obligatorio en Domicilio) -->
             <div class="form-group" id="groupCustomerPhone">
                 <label for="telefono">Teléfono / WhatsApp *</label>
                 <input type="tel" id="telefono" class="form-input" placeholder="Ej. 5555-1234" required>
             </div>
 
-            <!-- 4. Ubicación GPS Waze o Google Maps (Campo de texto OBLIGATORIO en Domicilio) -->
             <div class="form-group" id="groupCustomerGps">
                 <label for="gpsLink">Ubicación GPS Waze o Google Maps *</label>
                 <div style="display: flex; gap: 8px;">
@@ -947,13 +973,11 @@
                 <small style="color: var(--text-muted); font-size: 11px;">Pega el enlace de tu ubicación o presiona "📍 Mi GPS" para detección automática</small>
             </div>
 
-            <!-- 5. Dirección Escrita y Referencias (Campo de texto OPCIONAL en Domicilio) -->
             <div class="form-group" id="groupCustomerAddress">
                 <label for="direccion">Dirección Escrita y Referencias (Opcional)</label>
                 <textarea id="direccion" class="form-input" rows="2" placeholder="Ej. Casa de 2 niveles color crema, frente al parque central"></textarea>
             </div>
 
-            <!-- 6. Forma de Pago (Efectivo / Transferencia en Domicilio) -->
             <div class="form-group" id="groupFormaPago">
                 <label for="formaPago">Forma de Pago *</label>
                 <select id="formaPago" class="form-select">
@@ -962,26 +986,23 @@
                 </select>
             </div>
 
-            <!-- 7. Instrucciones especiales para cocina (Opcional) -->
             <div class="form-group" id="groupNotas">
                 <label for="notas">Instrucciones especiales para cocina (Opcional)</label>
-                <input type="text" id="notas" class="form-input" placeholder="Ej. Servir sin cebolla, salsa picante aparte, carne bien cocida...">
+                <textarea id="notas" class="form-input" rows="2" placeholder="Ej. Sin cebolla, aderezo aparte, salsa bien picante..."></textarea>
             </div>
 
-            <!-- 8. Desglose del Total -->
             <div class="order-summary-box">
                 <div class="summary-line">
                     <span>Subtotal</span>
                     <span id="summarySubtotal">Q0.00</span>
                 </div>
                 <div class="summary-line total">
-                    <span>Total a Pagar</span>
-                    <span id="summaryTotal" style="color: var(--secondary-color);">Q0.00</span>
+                    <span>Total a Cancelar</span>
+                    <span id="summaryTotal">Q0.00</span>
                 </div>
             </div>
         </div>
 
-        <!-- 9. Botón "Confirmar y Enviar Pedido" -->
         <div class="modal-footer" id="modalFooter">
             <button class="btn-confirm-order" id="btnConfirmOrder" onclick="submitWebOrder()">
                 <span>Confirmar y Enviar Pedido</span> ➔
@@ -989,7 +1010,26 @@
         </div>
     </div>
 
-    <!-- JavaScript Logic & Firebase Integration -->
-    <script src="app.js"></script>
+    <!-- Dynamic Script Loader: Loads app.js relative or absolute -->
+    <script>
+        (function() {
+            var search = window.location.search || '';
+            var hash = window.location.hash || '';
+            var btnMain = document.getElementById('btnRecovMain');
+            var btnRoot = document.getElementById('btnRecovRoot');
+            if (btnMain) btnMain.href = '/Restaurante/' + search + hash;
+            if (btnRoot) btnRoot.href = '/' + search + hash;
+
+            // Cargar app.js
+            var script = document.createElement('script');
+            script.src = 'app.js';
+            script.onerror = function() {
+                var fallbackScript = document.createElement('script');
+                fallbackScript.src = './app.js';
+                document.body.appendChild(fallbackScript);
+            };
+            document.body.appendChild(script);
+        })();
+    </script>
 </body>
 </html>

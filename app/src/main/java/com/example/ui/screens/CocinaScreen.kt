@@ -200,12 +200,18 @@ fun CocinaScreen(
         previousPendingOrderIds = currentPendingIds
     }
 
+    val isFirestoreSyncActive by viewModel.isFirestoreSyncActive.collectAsState()
+    val syncStatusLabel by viewModel.syncStatusLabel.collectAsState()
+
     Scaffold(
         topBar = {
             ModuleTopBar(
                 title = "Módulo Cocina",
                 subtitle = "Estación: $activeKitchenName • $pendingCount pendientes • $inProgressCount en proceso",
                 onBackClick = onBackToInicio,
+                isSyncActive = isFirestoreSyncActive,
+                syncStatusLabel = syncStatusLabel,
+                onSyncClick = { viewModel.triggerManualSync() },
                 actions = {
                     // Quick Disponibilidad Lateral Drawer Action
                     IconButton(
@@ -597,7 +603,7 @@ fun CocinaScreen(
                     FilterChip(
                         selected = selectedFilter == "TODOS",
                         onClick = { selectedFilter = "TODOS" },
-                        label = { Text("Todas ($kitchenOrders.size)") }
+                        label = { Text("Todas ($totalActive)") }
                     )
                 }
                 item {
@@ -632,6 +638,7 @@ fun CocinaScreen(
             } else {
                 LazyColumn(
                     verticalArrangement = Arrangement.spacedBy(16.dp),
+                    contentPadding = PaddingValues(bottom = 80.dp),
                     modifier = Modifier.fillMaxSize()
                 ) {
                     items(filteredOrders, key = { it.id }) { order ->

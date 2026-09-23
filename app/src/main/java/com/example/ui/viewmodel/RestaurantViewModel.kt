@@ -30,7 +30,20 @@ class RestaurantViewModel(application: Application) : AndroidViewModel(applicati
     val syncError: StateFlow<String?>
     val syncStatusLabel: StateFlow<String>
 
-    val deviceId = MutableStateFlow("DEV-RIVERA-POS1").asStateFlow()
+    private val prefs = application.getSharedPreferences("rivera_pos_session", Context.MODE_PRIVATE)
+
+    private val persistentDeviceId: String = run {
+        val existing = prefs.getString("unique_device_id", null)
+        if (!existing.isNullOrBlank()) {
+            existing
+        } else {
+            val generated = "DEV-" + java.util.UUID.randomUUID().toString().substring(0, 8).uppercase()
+            prefs.edit().putString("unique_device_id", generated).apply()
+            generated
+        }
+    }
+
+    val deviceId = MutableStateFlow(persistentDeviceId).asStateFlow()
 
     init {
         val dao = AppDatabase.getDatabase(application, viewModelScope).restaurantDao()
@@ -47,13 +60,16 @@ class RestaurantViewModel(application: Application) : AndroidViewModel(applicati
     val systemSettings: StateFlow<SystemSettingsEntity> = repository.systemSettings
         .map { settings ->
             val current = settings ?: SystemSettingsEntity(id = 1)
-            if (current.website.isBlank() || current.website == "www.restauranterivera.com") {
-                current.copy(website = "https://riveraga01-cmd.github.io/Restaurante-manager_app/")
+            if (current.website.isBlank() ||
+                current.website == "www.restauranterivera.com" ||
+                current.website.contains("Restaurante-manager_app")
+            ) {
+                current.copy(website = "https://riveraga01-cmd.github.io/Restaurante/")
             } else {
                 current
             }
         }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), SystemSettingsEntity(id = 1, website = "https://riveraga01-cmd.github.io/Restaurante-manager_app/"))
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), SystemSettingsEntity(id = 1, website = "https://riveraga01-cmd.github.io/Restaurante/"))
 
     fun saveSystemSettings(settings: SystemSettingsEntity, onComplete: () -> Unit = {}) {
         viewModelScope.launch {
@@ -78,10 +94,18 @@ class RestaurantViewModel(application: Application) : AndroidViewModel(applicati
 
     fun pairDeviceWithCode(code: String, onResult: (Boolean, String, String?) -> Unit) {
         viewModelScope.launch {
+            val manufacturer = android.os.Build.MANUFACTURER.orEmpty().replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
+            val model = android.os.Build.MODEL.orEmpty()
+            val deviceModelName = if (manufacturer.isNotBlank() || model.isNotBlank()) {
+                "$manufacturer $model".trim()
+            } else {
+                "Terminal Rivera " + persistentDeviceId.takeLast(4)
+            }
+
             val (success, message, role) = repository.validateAndPairDeviceCode(
                 code = code,
                 deviceId = deviceId.value,
-                deviceName = "Dispositivo Móvil " + (10..99).random()
+                deviceName = deviceModelName
             )
             if (success && role != null) {
                 val targetRole = when (role.uppercase()) {
@@ -106,7 +130,7 @@ class RestaurantViewModel(application: Application) : AndroidViewModel(applicati
     fun generateDeviceBindingCode(
         role: String,
         branch: String = "Sucursal Central",
-        isMultiUse: Boolean = false,
+        isMultiUse: Boolean = true,
         daysValid: Int = 30,
         onGenerated: (DeviceBindingEntity) -> Unit = {}
     ) {
@@ -127,7 +151,7 @@ class RestaurantViewModel(application: Application) : AndroidViewModel(applicati
                 role = "GERENTE",
                 deviceId = deviceId.value,
                 action = "GENERAR_CODIGO",
-                details = "Código de vinculación ${binding.code} generado para rol $role"
+                details = "Código de vinculación ${binding.code} generado para rol $role (Multiuso: $isMultiUse)"
             )
             onGenerated(binding)
         }
@@ -136,6 +160,19 @@ class RestaurantViewModel(application: Application) : AndroidViewModel(applicati
     fun deleteDeviceBinding(id: Long) {
         viewModelScope.launch {
             repository.deleteDeviceBinding(id)
+        }
+    }
+
+    fun deleteLinkedDevice(targetDeviceId: String) {
+        viewModelScope.launch {
+            repository.deleteLinkedDevice(targetDeviceId)
+            repository.logAudit(
+                user = currentUser.value?.name ?: "Gerente",
+                role = "GERENTE",
+                deviceId = deviceId.value,
+                action = "DESVINCULAR_DISPOSITIVO",
+                details = "Dispositivo terminal $targetDeviceId desvinculado del restaurante"
+            )
         }
     }
 
@@ -149,8 +186,6 @@ class RestaurantViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     // --- NAVIGATION ROLE STATE & ANTI-REINICIOS PERSISTENCE ---
-    private val prefs = application.getSharedPreferences("rivera_pos_session", Context.MODE_PRIVATE)
-
     private val _currentRole = MutableStateFlow(
         try {
             val saved = prefs.getString("saved_current_role", MainRole.INICIO.name) ?: MainRole.INICIO.name
@@ -1093,6 +1128,12 @@ class RestaurantViewModel(application: Application) : AndroidViewModel(applicati
     val activeWebOrders: StateFlow<List<WebOrderEntity>> = repository.activeWebOrders
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    val newPendingWebOrderAlert: StateFlow<WebOrderEntity?> = repository.newPendingWebOrderAlert
+
+    fun clearPendingWebOrderAlert() {
+        repository.clearPendingWebOrderAlert()
+    }
+
     fun validateWebOrderAndSendToKitchen(
         webOrderId: Long,
         assignedWaiter: String = currentUser.value?.name ?: "Mesero Web",
@@ -1470,6 +1511,36 @@ class RestaurantViewModel(application: Application) : AndroidViewModel(applicati
             val occupiedSince = if (newStatus == "Ocupada") System.currentTimeMillis() else null
             repository.updateTable(table.copy(status = newStatus, occupiedSince = occupiedSince))
             logAuditEvent("ESTADO_MESA", "Estado de mesa '${table.tableNumber}' cambiado a $newStatus")
+        }
+    }
+
+    fun releaseTableService(tableName: String, onResult: (Boolean, String) -> Unit) {
+        viewModelScope.launch {
+            val orders = repository.allOrders.firstOrNull() ?: emptyList()
+            val activeOrdersForTable = orders.filter {
+                it.tableNumber.equals(tableName, ignoreCase = true) &&
+                        it.status != "PAGADO" && it.status != "CANCELADO"
+            }
+
+            if (activeOrdersForTable.isNotEmpty()) {
+                onResult(false, "Hay consumos pendientes de cobro antes de liberar la mesa")
+                return@launch
+            }
+
+            val tableEntity = allTables.value.find { it.tableNumber.equals(tableName, ignoreCase = true) }
+            if (tableEntity != null) {
+                repository.updateTable(tableEntity.copy(status = "Disponible", occupiedSince = null))
+            }
+
+            if (_selectedTable.value.equals(tableName, ignoreCase = true)) {
+                val otherAvailable = allTables.value.firstOrNull {
+                    !it.tableNumber.equals(tableName, ignoreCase = true) && it.isActive
+                }?.tableNumber ?: "Mesa 1"
+                _selectedTable.value = otherAvailable
+            }
+
+            logAuditEvent("LIBERAR_MESA", "Servicio finalizado y mesa '$tableName' liberada exitosamente.")
+            onResult(true, "Servicio finalizado. Mesa '$tableName' liberada.")
         }
     }
 

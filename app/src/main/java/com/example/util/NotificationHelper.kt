@@ -357,6 +357,26 @@ object NotificationHelper {
         playAlertSound(context, ringtoneUriString, volume)
     }
 
+    fun showWebOrderNotification(
+        context: Context,
+        title: String,
+        body: String,
+        orderId: Long? = null,
+        tableNumber: String? = null,
+        enableSound: Boolean = true,
+        enableVibration: Boolean = true
+    ) {
+        showKitchenNotification(
+            context = context,
+            title = title,
+            body = body,
+            orderId = orderId,
+            tableNumber = tableNumber,
+            enableSound = enableSound,
+            enableVibration = enableVibration
+        )
+    }
+
     fun sendKitchenNotificationLocally(
         context: Context,
         orderNumber: String,

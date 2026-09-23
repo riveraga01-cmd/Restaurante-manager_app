@@ -5,6 +5,7 @@ import com.example.data.entity.*
 import com.example.data.firebase.FirestoreSyncManager
 import com.example.util.OrderCalculationHelper
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.firstOrNull
 import java.util.Calendar
@@ -353,6 +354,10 @@ class RestaurantRepository(
         }
 
         firestoreSyncManager?.syncOrderToRemote(updatedOrder, items)
+
+        // Decoupled Table Release:
+        // Do NOT automatically free table upon payment/facturación.
+        // The table must remain OCCUPIED until explicit 'Cerrar Servicio / Liberar Mesa' action.
     }
 
     suspend fun cancelOrder(orderId: Long) {
@@ -361,6 +366,15 @@ class RestaurantRepository(
         dao.updateOrder(updated)
         val items = dao.getOrderItems(orderId)
         firestoreSyncManager?.syncOrderToRemote(updated, items)
+
+        // Automatically free table if no other active orders remain for this table
+        val remainingActiveOrder = dao.getActiveOrderByTable(order.tableNumber)
+        if (remainingActiveOrder == null) {
+            val matchedTable = dao.getTableByNumber(order.tableNumber)
+            if (matchedTable != null && matchedTable.status == "Ocupada") {
+                dao.updateTable(matchedTable.copy(status = "Disponible", occupiedSince = null))
+            }
+        }
     }
 
     suspend fun deleteOrderAndDetails(orderId: Long) {
@@ -551,24 +565,84 @@ class RestaurantRepository(
     }
 
     suspend fun deleteDeviceBinding(id: Long) {
+        val existing = dao.getAllDeviceBindingsDirect().firstOrNull { it.id == id }
         dao.deleteDeviceBindingById(id)
+        if (existing != null) {
+            firestoreSyncManager?.deleteDeviceBindingFromRemote(existing.code, id)
+        }
     }
 
-    suspend fun validateAndPairDeviceCode(code: String, deviceId: String, deviceName: String): Triple<Boolean, String, String?> {
-        val cleanCode = code.trim().uppercase()
-        val binding = dao.getDeviceBindingByCode(cleanCode)
-            ?: return Triple(false, "PIN o código no válido.", null)
-
-        if (System.currentTimeMillis() > binding.expiresAt) {
-            return Triple(false, "El código de vinculación ha expirado.", null)
+    suspend fun validateAndPairDeviceCode(
+        code: String,
+        deviceId: String,
+        deviceName: String
+    ): Triple<Boolean, String, String?> {
+        val rawInput = code.trim()
+        if (rawInput.isBlank()) {
+            return Triple(false, "El PIN o código de vinculación no puede estar vacío.", null)
         }
 
+        // 1. Extraer código normalizado y PIN numérico (4 a 6 dígitos)
+        val extractedCode = com.example.util.QRCodeHelper.extractPairingCode(rawInput).trim().uppercase()
+        val extractedPin = com.example.util.QRCodeHelper.extractPin(rawInput)
+        val digitsOnly = rawInput.filter { it.isDigit() }
+        val effectivePin = if (digitsOnly.length in 4..6) digitsOnly else extractedPin
+
+        // 2. Buscar en base de datos local Room
+        var binding: DeviceBindingEntity? = dao.getDeviceBindingByCode(extractedCode)
+
+        if (binding == null) {
+            val allLocal = dao.getAllDeviceBindingsDirect()
+            binding = allLocal.firstOrNull { b ->
+                val codeUpper = b.code.uppercase()
+                val pinInCode = codeUpper.substringAfterLast("-", "")
+                codeUpper == extractedCode ||
+                        (effectivePin.isNotEmpty() && pinInCode == effectivePin) ||
+                        (effectivePin.isNotEmpty() && codeUpper.endsWith("-$effectivePin")) ||
+                        (effectivePin.isNotEmpty() && codeUpper.contains(effectivePin)) ||
+                        (extractedCode.isNotEmpty() && codeUpper.contains(extractedCode)) ||
+                        (extractedCode.isNotEmpty() && extractedCode.contains(codeUpper))
+            }
+        }
+
+        // 3. Si no está en Room local (caso habitual entre 2 dispositivos físicos distintos),
+        // consultar inmediatamente en Firebase Firestore en la nube
+        if (binding == null && firestoreSyncManager != null) {
+            // Intentar primero con el código extraído o el PIN directo
+            val queryParam = if (extractedCode.isNotEmpty()) extractedCode else effectivePin
+            var remoteBinding = firestoreSyncManager.fetchDeviceBindingByCodeOrPin(queryParam)
+
+            if (remoteBinding == null && effectivePin.isNotEmpty() && effectivePin != queryParam) {
+                remoteBinding = firestoreSyncManager.fetchDeviceBindingByCodeOrPin(effectivePin)
+            }
+
+            if (remoteBinding != null) {
+                val existingLocal = dao.getDeviceBindingByCode(remoteBinding.code)
+                val idToUse = existingLocal?.id ?: 0L
+                val savedId = dao.insertDeviceBinding(remoteBinding.copy(id = idToUse))
+                binding = remoteBinding.copy(id = if (idToUse != 0L) idToUse else savedId)
+            }
+        }
+
+        if (binding == null) {
+            return Triple(
+                false,
+                "PIN o código no encontrado. Verifique que el dispositivo emisor (Gerente) haya generado el código y cuente con conexión a internet.",
+                null
+            )
+        }
+
+        if (System.currentTimeMillis() > binding.expiresAt) {
+            return Triple(false, "El PIN o código de vinculación ha expirado. Solicite un nuevo código al Gerente.", null)
+        }
+
+        // 4. Registrar la vinculación del dispositivo físico
         val linkedDevice = LinkedDeviceEntity(
             deviceId = deviceId,
             deviceName = deviceName,
             branchName = binding.branchName,
             assignedRole = binding.assignedRole,
-            linkedUser = "Terminal ${binding.assignedRole}",
+            linkedUser = "Terminal ${binding.assignedRole} ($deviceName)",
             linkedAt = System.currentTimeMillis(),
             lastSeen = System.currentTimeMillis(),
             isBlocked = false
@@ -576,10 +650,14 @@ class RestaurantRepository(
         dao.insertLinkedDevice(linkedDevice)
         firestoreSyncManager?.syncLinkedDeviceToRemote(linkedDevice)
 
+        // 5. Manejo de Multidispositivo: si es multiuso, sumar uso; si no, consumirlo
         if (!binding.isMultiUse) {
             dao.deleteDeviceBindingById(binding.id)
+            firestoreSyncManager?.deleteDeviceBindingFromRemote(binding.code, binding.id)
         } else {
-            dao.updateDeviceBinding(binding.copy(usedCount = binding.usedCount + 1))
+            val updatedBinding = binding.copy(usedCount = binding.usedCount + 1)
+            dao.updateDeviceBinding(updatedBinding)
+            firestoreSyncManager?.syncDeviceBindingToRemote(updatedBinding)
         }
 
         logAudit(
@@ -587,10 +665,14 @@ class RestaurantRepository(
             role = binding.assignedRole,
             deviceId = deviceId,
             action = "VINCULAR_DISPOSITIVO",
-            details = "Dispositivo $deviceName vinculado con éxito con código $cleanCode para rol ${binding.assignedRole}"
+            details = "Dispositivo físico $deviceName ($deviceId) vinculado con éxito para rol ${binding.assignedRole}"
         )
 
-        return Triple(true, "Dispositivo vinculado exitosamente para ${binding.assignedRole} (${binding.branchName})", binding.assignedRole)
+        return Triple(
+            true,
+            "¡Dispositivo vinculado exitosamente! Rol asignado: ${binding.assignedRole} (${binding.branchName})",
+            binding.assignedRole
+        )
     }
 
     // --- LINKED DEVICES ---
@@ -603,6 +685,7 @@ class RestaurantRepository(
 
     suspend fun deleteLinkedDevice(deviceId: String) {
         dao.deleteLinkedDeviceById(deviceId)
+        firestoreSyncManager?.deleteLinkedDeviceFromRemote(deviceId)
     }
 
     // --- AUDIT LOGS ---
@@ -1011,6 +1094,13 @@ class RestaurantRepository(
     val activeWebOrders: Flow<List<WebOrderEntity>> = dao.getActiveWebOrders()
     val webVisibleMenuItems: Flow<List<MenuItemEntity>> = dao.getWebVisibleMenuItems()
 
+    val newPendingWebOrderAlert: StateFlow<WebOrderEntity?> = firestoreSyncManager?.newPendingWebOrderAlert 
+        ?: MutableStateFlow(null)
+
+    fun clearPendingWebOrderAlert() {
+        firestoreSyncManager?.clearPendingWebOrderAlert()
+    }
+
     suspend fun createWebOrder(webOrder: WebOrderEntity): Long {
         val id = dao.insertWebOrder(webOrder)
         val saved = if (webOrder.id == 0L) webOrder.copy(id = id) else webOrder
@@ -1078,19 +1168,19 @@ class RestaurantRepository(
             dao.updateTable(matchedTable.copy(status = "Ocupada", occupiedSince = System.currentTimeMillis()))
         }
 
-        // 2. Mark Web Order as 'En Cocina' and link to POS order
+        // 2. Mark Web Order as 'EN_PREPARACION' and link to POS order
         val now = System.currentTimeMillis()
         dao.validateAndLinkWebOrder(
             id = webOrderId,
-            status = "En Cocina",
+            status = "EN_PREPARACION",
             posOrderId = createdPosOrderId,
             validatedAt = now
         )
 
         // 3. Sync updates to Firestore
         firestoreSyncManager?.updateRemoteWebOrderStatus(
-            webOrderId = webOrder.webOrderId.ifBlank { "WEB-$webOrderId" },
-            newStatus = "En Cocina",
+            webOrderId = webOrder.webOrderId.ifBlank { "PED-WEB-$webOrderId" },
+            newStatus = "EN_PREPARACION",
             posOrderId = createdPosOrderId
         )
         firestoreSyncManager?.syncOrderToRemote(posOrder.copy(id = createdPosOrderId), orderItems)
@@ -1103,12 +1193,12 @@ class RestaurantRepository(
         reason: String = "Rechazado por el restaurante"
     ) {
         val webOrder = dao.getWebOrderById(webOrderId) ?: return
-        // Mark status as Cancelado in remote Firestore
+        // Mark status as RECHAZADO in remote Firestore
         firestoreSyncManager?.updateRemoteWebOrderStatus(
-            webOrderId = webOrder.webOrderId.ifBlank { "WEB-$webOrderId" },
-            newStatus = "Cancelado"
+            webOrderId = webOrder.webOrderId.ifBlank { "PED-WEB-$webOrderId" },
+            newStatus = "RECHAZADO"
         )
-        // Delete from local queue
+        // Delete or mark from local queue
         dao.deleteWebOrderById(webOrderId)
         firestoreSyncManager?.deleteRemoteWebOrder(webOrderId, webOrder.webOrderId)
     }

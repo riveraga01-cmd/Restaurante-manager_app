@@ -66,6 +66,7 @@ fun GerenteScreen(
     val activeTheme by viewModel.activeTheme.collectAsState()
     val systemSettings by viewModel.systemSettings.collectAsState()
     val isFirestoreSyncActive by viewModel.isFirestoreSyncActive.collectAsState()
+    val syncStatusLabel by viewModel.syncStatusLabel.collectAsState()
     val lastSyncTimestamp by viewModel.lastSyncTimestamp.collectAsState()
     val syncError by viewModel.syncError.collectAsState()
 
@@ -112,6 +113,9 @@ fun GerenteScreen(
                 title = "Módulo Gerente",
                 subtitle = "Control total: Menú, Precios, Inventario & Reportes",
                 onBackClick = onBackToInicio,
+                isSyncActive = isFirestoreSyncActive,
+                syncStatusLabel = syncStatusLabel,
+                onSyncClick = { viewModel.triggerManualSync() },
                 actions = {
                     val isDarkTheme by viewModel.isDarkTheme.collectAsState()
                     IconButton(onClick = { viewModel.toggleDarkTheme() }) {

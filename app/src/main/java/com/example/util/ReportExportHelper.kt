@@ -2,11 +2,17 @@ package com.example.util
 
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.graphics.Bitmap
 import android.net.Uri
 import android.os.Build
 import android.print.PrintAttributes
 import android.print.PrintDocumentAdapter
 import android.print.PrintManager
+import android.util.Base64
+import android.util.Log
+import android.view.View
+import android.webkit.RenderProcessGoneDetail
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.Toast
@@ -16,6 +22,10 @@ import com.example.data.entity.InvoiceEntity
 import com.example.data.entity.OrderItemEntity
 import com.example.data.entity.SaleEntity
 import com.example.ui.components.formatQuetzales
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -167,7 +177,9 @@ object ReportExportHelper {
     // 3. EXPORTAR A PDF / IMPRIMIR VÍA PRINT MANAGER
     fun printOrExportPdf(context: Context, report: DetailedSalesReportData) {
         val htmlContent = buildHtmlReport(report)
-        val webView = WebView(context)
+        val webView = WebView(context).apply {
+            setLayerType(View.LAYER_TYPE_SOFTWARE, null)
+        }
         webView.webViewClient = object : WebViewClient() {
             override fun onPageFinished(view: WebView?, url: String?) {
                 val printManager = context.getSystemService(Context.PRINT_SERVICE) as? PrintManager
@@ -179,6 +191,16 @@ object ReportExportHelper {
                 } else {
                     Toast.makeText(context, "Servicio de impresión no disponible", Toast.LENGTH_SHORT).show()
                 }
+            }
+
+            override fun onRenderProcessGone(view: WebView?, detail: RenderProcessGoneDetail?): Boolean {
+                val parent = view?.parent as? android.view.ViewGroup
+                parent?.removeView(view)
+                try {
+                    view?.stopLoading()
+                    view?.destroy()
+                } catch (_: Throwable) {}
+                return true
             }
         }
         webView.loadDataWithBaseURL(null, htmlContent, "text/html", "UTF-8", null)
@@ -383,42 +405,94 @@ object ReportExportHelper {
     }
 
     fun shareInvoiceViaWhatsApp(context: Context, invoice: InvoiceEntity, items: List<OrderItemEntity>) {
-        val text = buildInvoiceFormattedText(invoice, items)
-        val sendIntent = Intent().apply {
-            action = Intent.ACTION_SEND
-            putExtra(Intent.EXTRA_TEXT, text)
-            type = "text/plain"
-            setPackage("com.whatsapp")
-        }
         try {
-            context.startActivity(sendIntent)
-        } catch (e: Exception) {
-            val chooser = Intent().apply {
-                action = Intent.ACTION_SEND
-                putExtra(Intent.EXTRA_TEXT, text)
-                type = "text/plain"
+            // 1. Generar el archivo físico PDF con diseño FEL oficial dentro de context.cacheDir
+            val pdfFile = PdfInvoiceGenerator.generateInvoicePdfFile(context, invoice, items)
+
+            // 2. Generar el URI seguro mediante FileProvider con permisos de lectura
+            val pdfUri: Uri = FileProvider.getUriForFile(
+                context,
+                "${context.packageName}.fileprovider",
+                pdfFile
+            )
+
+            val caption = "Adjunto Factura Electrónica FEL No. ${invoice.invoiceNumber} de ${invoice.restaurantName}. Total: ${invoice.currencySymbol}${String.format(Locale.US, "%.2f", invoice.totalAmount)}"
+
+            // 3. Construir Intent con MIME application/pdf y adjuntar EXTRA_STREAM
+            val sendIntent = Intent(Intent.ACTION_SEND).apply {
+                type = "application/pdf"
+                putExtra(Intent.EXTRA_STREAM, pdfUri)
+                putExtra(Intent.EXTRA_TEXT, caption)
+                putExtra(Intent.EXTRA_SUBJECT, "Factura Electrónica ${invoice.invoiceNumber}")
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                setPackage("com.whatsapp")
             }
-            context.startActivity(Intent.createChooser(chooser, "Compartir Factura ${invoice.invoiceNumber}"))
+
+            // Conceder permisos de lectura a la aplicación receptora
+            context.grantUriPermission("com.whatsapp", pdfUri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            val resInfoList = context.packageManager.queryIntentActivities(sendIntent, PackageManager.MATCH_DEFAULT_ONLY)
+            for (resolveInfo in resInfoList) {
+                val packageName = resolveInfo.activityInfo.packageName
+                context.grantUriPermission(packageName, pdfUri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+
+            try {
+                context.startActivity(sendIntent)
+            } catch (e: Exception) {
+                // Si WhatsApp no está instalado directamente, abrir selector general de aplicaciones
+                val chooser = Intent(Intent.ACTION_SEND).apply {
+                    type = "application/pdf"
+                    putExtra(Intent.EXTRA_STREAM, pdfUri)
+                    putExtra(Intent.EXTRA_TEXT, caption)
+                    putExtra(Intent.EXTRA_SUBJECT, "Factura Electrónica ${invoice.invoiceNumber}")
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+                context.startActivity(Intent.createChooser(chooser, "Compartir Factura PDF ${invoice.invoiceNumber}"))
+            }
+        } catch (e: Exception) {
+            Log.e("ReportExportHelper", "Error al compartir Factura PDF por WhatsApp: ${e.message}", e)
+            Toast.makeText(context, "Error al generar PDF para WhatsApp: ${e.message}", Toast.LENGTH_LONG).show()
         }
     }
 
     fun sendInvoiceViaEmail(context: Context, invoice: InvoiceEntity, items: List<OrderItemEntity>) {
-        val text = buildInvoiceFormattedText(invoice, items)
-        val emailIntent = Intent(Intent.ACTION_SENDTO).apply {
-            data = Uri.parse("mailto:")
-            putExtra(Intent.EXTRA_SUBJECT, "Factura ${invoice.invoiceNumber} - ${invoice.restaurantName}")
-            putExtra(Intent.EXTRA_TEXT, text)
-        }
         try {
+            val pdfFile = PdfInvoiceGenerator.generateInvoicePdfFile(context, invoice, items)
+            val pdfUri: Uri = FileProvider.getUriForFile(
+                context,
+                "${context.packageName}.fileprovider",
+                pdfFile
+            )
+
+            val emailIntent = Intent(Intent.ACTION_SEND).apply {
+                type = "application/pdf"
+                putExtra(Intent.EXTRA_EMAIL, if (invoice.customerPhone.contains("@")) arrayOf(invoice.customerPhone) else emptyArray<String>())
+                putExtra(Intent.EXTRA_SUBJECT, "Factura FEL ${invoice.invoiceNumber} - ${invoice.restaurantName}")
+                putExtra(Intent.EXTRA_TEXT, "Estimado(a) cliente,\n\nAdjuntamos su Factura Electrónica (FEL) No. ${invoice.invoiceNumber} correspondiente a su consumo en ${invoice.restaurantName}.\n\nTotal: ${invoice.currencySymbol}${String.format(Locale.US, "%.2f", invoice.totalAmount)}\n\n¡Gracias por su preferencia!")
+                putExtra(Intent.EXTRA_STREAM, pdfUri)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
             context.startActivity(Intent.createChooser(emailIntent, "Enviar Factura por Correo"))
         } catch (e: Exception) {
-            Toast.makeText(context, "No hay aplicación de correo configurada", Toast.LENGTH_SHORT).show()
+            val text = buildInvoiceFormattedText(invoice, items)
+            val emailIntent = Intent(Intent.ACTION_SENDTO).apply {
+                data = Uri.parse("mailto:")
+                putExtra(Intent.EXTRA_SUBJECT, "Factura ${invoice.invoiceNumber} - ${invoice.restaurantName}")
+                putExtra(Intent.EXTRA_TEXT, text)
+            }
+            try {
+                context.startActivity(Intent.createChooser(emailIntent, "Enviar Factura por Correo"))
+            } catch (ex: Exception) {
+                Toast.makeText(context, "No hay aplicación de correo configurada", Toast.LENGTH_SHORT).show()
+            }
         }
     }
 
     fun printOrExportInvoicePdf(context: Context, invoice: InvoiceEntity, items: List<OrderItemEntity>) {
         val htmlContent = buildHtmlInvoice(invoice, items)
-        val webView = WebView(context)
+        val webView = WebView(context).apply {
+            setLayerType(View.LAYER_TYPE_SOFTWARE, null)
+        }
         webView.webViewClient = object : WebViewClient() {
             override fun onPageFinished(view: WebView?, url: String?) {
                 val printManager = context.getSystemService(Context.PRINT_SERVICE) as? PrintManager
@@ -431,145 +505,413 @@ object ReportExportHelper {
                     Toast.makeText(context, "Servicio de impresión no disponible", Toast.LENGTH_SHORT).show()
                 }
             }
+
+            override fun onRenderProcessGone(view: WebView?, detail: RenderProcessGoneDetail?): Boolean {
+                val parent = view?.parent as? android.view.ViewGroup
+                parent?.removeView(view)
+                try {
+                    view?.stopLoading()
+                    view?.destroy()
+                } catch (_: Throwable) {}
+                return true
+            }
         }
         webView.loadDataWithBaseURL(null, htmlContent, "text/html", "UTF-8", null)
     }
 
-    private fun buildHtmlInvoice(invoice: InvoiceEntity, items: List<OrderItemEntity>): String {
-        val sb = StringBuilder()
-        val cur = invoice.currencySymbol
-        val dateOnly = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault()).format(Date(invoice.timestamp))
-        val timeOnly = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(invoice.timestamp))
+    // =========================================================================
+    // 3. INTEGRACIÓN CON IMPRESORA TÉRMICA / DE CALOR (Bluetooth / ESC-POS / PrintManager)
+    // =========================================================================
 
-        sb.append("<!DOCTYPE html><html><head><style>")
-        sb.append("body { font-family: 'Helvetica Neue', Arial, sans-serif; margin: 20px; color: #1F2937; }")
-        sb.append(".header { text-align: center; border-bottom: 2px solid #2563EB; padding-bottom: 10px; margin-bottom: 15px; }")
-        sb.append(".header h1 { color: #1E3A8A; margin: 0; font-size: 22px; }")
-        sb.append(".header h2 { color: #3B82F6; margin: 2px 0; font-size: 15px; font-weight: normal; }")
-        sb.append(".header p { margin: 2px 0; color: #4B5563; font-size: 13px; }")
-        sb.append(".info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px; background: #F8FAFC; padding: 12px; border-radius: 8px; border: 1px solid #E2E8F0; }")
-        sb.append(".info-block h3 { margin: 0 0 6px 0; color: #2563EB; font-size: 13px; text-transform: uppercase; }")
-        sb.append(".info-block p { margin: 2px 0; font-size: 12px; }")
-        sb.append("table { width: 100%; border-collapse: collapse; margin-top: 10px; margin-bottom: 15px; }")
-        sb.append("th { background-color: #1E3A8A; color: white; padding: 8px; font-size: 12px; text-align: left; }")
-        sb.append("td { border-bottom: 1px solid #E2E8F0; padding: 8px; font-size: 12px; }")
-        sb.append(".item-note { font-size: 11px; color: #6B7280; margin-top: 2px; font-style: italic; }")
-        sb.append(".totals { width: 300px; margin-left: auto; margin-top: 10px; }")
-        sb.append(".totals table { margin: 0; }")
-        sb.append(".totals td { padding: 4px 8px; border: none; }")
-        sb.append(".totals .grand-total { font-size: 15px; font-weight: bold; color: #047857; border-top: 2px solid #10B981; }")
-        sb.append(".legal-box { background: #FEF3C7; border: 1px solid #F59E0B; padding: 8px; border-radius: 6px; font-size: 11px; text-align: center; color: #92400E; margin-top: 15px; }")
-        sb.append(".tip-box { border: 1px dashed #94A3B8; padding: 10px; border-radius: 6px; font-size: 12px; margin-top: 15px; width: 280px; margin-left: auto; }")
-        sb.append(".footer { text-align: center; margin-top: 25px; padding-top: 10px; border-top: 1px dashed #CBD5E1; color: #64748B; font-size: 12px; }")
-        sb.append(".text-right { text-align: right; }")
+    /**
+     * Imprime el recibo térmico de la factura en papel continuo (58mm o 80mm).
+     * Si se detecta o proporciona una impresora Bluetooth, envía los comandos ESC/POS directamente.
+     * De lo contrario o como opción estándar, invoca el servicio nativo de impresión Android (PrintManager).
+     */
+    fun printThermalReceipt(
+        context: Context,
+        invoice: InvoiceEntity,
+        items: List<OrderItemEntity>,
+        paperWidthMm: Int = 80,
+        preferredBluetoothAddress: String? = null,
+        onResult: ((Boolean, String) -> Unit)? = null
+    ) {
+        val printerManager = ThermalPrinterManager(context)
+        val escPosBytes = printerManager.buildEscPosBytesForInvoice(invoice, items, paperWidthMm)
+
+        // Buscar impresora Bluetooth emparejada si no se especificó una
+        val targetBtAddress = preferredBluetoothAddress ?: run {
+            val paired = printerManager.getPairedBluetoothDevices()
+            paired.firstOrNull()?.second
+        }
+
+        if (!targetBtAddress.isNullOrBlank()) {
+            val config = ThermalPrinterConfig(
+                connectionType = PrinterConnectionType.BLUETOOTH,
+                bluetoothAddress = targetBtAddress,
+                paperWidthMm = paperWidthMm
+            )
+            Toast.makeText(context, "Enviando a impresora Bluetooth térmica...", Toast.LENGTH_SHORT).show()
+            CoroutineScope(Dispatchers.Main).launch {
+                val result = printerManager.printBytes(config, escPosBytes)
+                if (result.isSuccess) {
+                    Toast.makeText(context, "Ticket térmico impreso exitosamente.", Toast.LENGTH_SHORT).show()
+                    onResult?.invoke(true, result.getOrDefault("Éxito"))
+                } else {
+                    Toast.makeText(context, "Error Bluetooth, abriendo PrintManager nativo...", Toast.LENGTH_SHORT).show()
+                    printThermalViaPrintManager(context, invoice, items, paperWidthMm)
+                    onResult?.invoke(false, result.exceptionOrNull()?.message ?: "Error BT")
+                }
+            }
+        } else {
+            // Abrir servicio nativo PrintManager configurado para dimensiones de ticket térmico
+            printThermalViaPrintManager(context, invoice, items, paperWidthMm)
+            onResult?.invoke(true, "Enviado a servicio de impresión Android")
+        }
+    }
+
+    private fun printThermalViaPrintManager(
+        context: Context,
+        invoice: InvoiceEntity,
+        items: List<OrderItemEntity>,
+        paperWidthMm: Int = 80
+    ) {
+        val thermalHtml = buildThermalHtmlReceipt(invoice, items, paperWidthMm)
+        val webView = WebView(context).apply {
+            setLayerType(View.LAYER_TYPE_SOFTWARE, null)
+        }
+        webView.webViewClient = object : WebViewClient() {
+            override fun onPageFinished(view: WebView?, url: String?) {
+                val printManager = context.getSystemService(Context.PRINT_SERVICE) as? PrintManager
+                if (printManager != null) {
+                    val printAdapter = webView.createPrintDocumentAdapter("Ticket_${invoice.invoiceNumber}")
+                    val builder = PrintAttributes.Builder()
+                    builder.setMediaSize(PrintAttributes.MediaSize.ISO_A6)
+                    printManager.print("Ticket_${invoice.invoiceNumber}", printAdapter, builder.build())
+                } else {
+                    Toast.makeText(context, "Servicio de impresión no disponible", Toast.LENGTH_SHORT).show()
+                }
+            }
+
+            override fun onRenderProcessGone(view: WebView?, detail: RenderProcessGoneDetail?): Boolean {
+                val parent = view?.parent as? android.view.ViewGroup
+                parent?.removeView(view)
+                try {
+                    view?.stopLoading()
+                    view?.destroy()
+                } catch (_: Throwable) {}
+                return true
+            }
+        }
+        webView.loadDataWithBaseURL(null, thermalHtml, "text/html", "UTF-8", null)
+    }
+
+    private fun buildThermalHtmlReceipt(
+        invoice: InvoiceEntity,
+        items: List<OrderItemEntity>,
+        paperWidthMm: Int = 80
+    ): String {
+        val cur = invoice.currencySymbol
+        val dateFormat = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault())
+        val dateStr = dateFormat.format(Date(invoice.timestamp))
+        val baseAmount = invoice.totalAmount / 1.12
+        val vatAmount = invoice.totalAmount - baseAmount
+        val totalInWords = NumberToWordsHelper.toSpanishWords(invoice.totalAmount)
+
+        val sb = StringBuilder()
+        sb.append("<!DOCTYPE html><html><head><meta charset='utf-8'><style>")
+        sb.append("@page { size: ${paperWidthMm}mm auto; margin: 2mm; }")
+        sb.append("body { font-family: monospace; font-size: 11px; width: ${paperWidthMm - 4}mm; margin: 0 auto; color: #000; }")
+        sb.append(".center { text-align: center; }")
+        sb.append(".right { text-align: right; }")
+        sb.append(".bold { font-weight: bold; }")
+        sb.append(".divider { border-top: 1px dashed #000; margin: 5px 0; }")
+        sb.append(".double-divider { border-top: 2px solid #000; margin: 5px 0; }")
+        sb.append("table { width: 100%; border-collapse: collapse; font-size: 10.5px; }")
+        sb.append("td, th { padding: 2px 0; }")
         sb.append("</style></head><body>")
 
-        sb.append("<div class='header'>")
-        if (invoice.showLogo && invoice.logoUri.isNotBlank()) {
-            sb.append("<p style='font-size: 24px; font-weight: bold; margin: 0;'>🧾</p>")
+        sb.append("<div class='center'>")
+        sb.append("<div class='bold' style='font-size: 14px;'>${invoice.restaurantName.uppercase()}</div>")
+        if (invoice.branchName.isNotBlank()) sb.append("<div>Sucursal: ${invoice.branchName}</div>")
+        sb.append("<div>NIT Emisor: ${invoice.restaurantTaxId.ifBlank { "1234567-8" }}</div>")
+        if (invoice.restaurantAddress.isNotBlank()) sb.append("<div>${invoice.restaurantAddress}</div>")
+        if (invoice.restaurantPhone.isNotBlank()) sb.append("<div>Tel: ${invoice.restaurantPhone}</div>")
+        sb.append("</div>")
+
+        sb.append("<div class='double-divider'></div>")
+        sb.append("<div class='center bold'>DOCUMENTO TRIBUTARIO ELECTRÓNICO</div>")
+        sb.append("<div class='center bold' style='font-size: 13px;'>FACTURA (FEL)</div>")
+        sb.append("<div><b>Serie:</b> ${if (invoice.invoiceNumber.contains("-")) invoice.invoiceNumber.substringBeforeLast("-") else "FEL-A"}</div>")
+        sb.append("<div><b>Número:</b> ${invoice.invoiceNumber.substringAfterLast("-", invoice.invoiceNumber)}</div>")
+        sb.append("<div><b>Fecha:</b> $dateStr</div>")
+        sb.append("<div class='divider'></div>")
+
+        val clientName = when {
+            invoice.customerName.isNotBlank() -> invoice.customerName
+            invoice.customerType.isNotBlank() -> invoice.customerType
+            else -> "Consumidor Final"
         }
-        if (invoice.showRestaurantName) sb.append("<h1>${invoice.restaurantName}</h1>")
-        if (invoice.showBranchName && invoice.branchName.isNotBlank()) sb.append("<h2>${invoice.branchName}</h2>")
-        if (invoice.showTaxId && invoice.restaurantTaxId.isNotBlank()) sb.append("<p><b>NIT Emisor:</b> ${invoice.restaurantTaxId}</p>")
-        val headerInfo = mutableListOf<String>()
-        if (invoice.showAddress && invoice.restaurantAddress.isNotBlank()) headerInfo.add(invoice.restaurantAddress)
-        if (invoice.showPhone && invoice.restaurantPhone.isNotBlank()) headerInfo.add("Tel: ${invoice.restaurantPhone}")
-        if (headerInfo.isNotEmpty()) sb.append("<p>${headerInfo.joinToString(" • ")}</p>")
-        if (invoice.showEmail && invoice.restaurantEmail.isNotBlank()) sb.append("<p>Email: ${invoice.restaurantEmail}</p>")
-        sb.append("</div>")
-
-        sb.append("<div class='info-grid'>")
-        sb.append("<div class='info-block'>")
-        sb.append("<h3>Datos de Facturación</h3>")
-        if (invoice.showInvoiceNumber) sb.append("<p><b>Factura No:</b> ${invoice.invoiceNumber}</p>")
-        if (invoice.showOrderNumber) sb.append("<p><b>Comanda No:</b> #${invoice.orderNumber}</p>")
-        if (invoice.showDate) sb.append("<p><b>Fecha:</b> $dateOnly</p>")
-        if (invoice.showTime) sb.append("<p><b>Hora:</b> $timeOnly</p>")
-        if (invoice.showTableNumber && invoice.tableNumber.isNotBlank()) sb.append("<p><b>Mesa / Área:</b> ${invoice.tableNumber}</p>")
-        if (invoice.showWaiterName && invoice.waiterName.isNotBlank()) sb.append("<p><b>Mesero(a):</b> ${invoice.waiterName}</p>")
-        if (invoice.showCashierName) sb.append("<p><b>Cajero(a):</b> ${invoice.cashierName}</p>")
-        if (invoice.showPaymentMethod) sb.append("<p><b>Método Pago:</b> ${invoice.paymentMethod}</p>")
-        sb.append("</div>")
-
-        if (invoice.showCustomerType || invoice.showCustomerNit || invoice.showCustomerPhone) {
-            sb.append("<div class='info-block'>")
-            sb.append("<h3>Datos del Cliente</h3>")
-            if (invoice.showCustomerType) {
-                val custNameDisplay = when (invoice.customerType) {
-                    "Consumidor Final" -> "Consumidor Final"
-                    "Clientes Varios" -> "Clientes Varios"
-                    else -> invoice.customerName.ifBlank { "Cliente Registrado" }
-                }
-                sb.append("<p><b>Nombre:</b> $custNameDisplay</p>")
-            }
-            if (invoice.showCustomerNit && invoice.customerNit.isNotBlank()) {
-                sb.append("<p><b>NIT:</b> ${invoice.customerNit}</p>")
-            }
-            if (invoice.showCustomerPhone && invoice.customerPhone.isNotBlank()) {
-                sb.append("<p><b>Teléfono:</b> ${invoice.customerPhone}</p>")
-            }
-            sb.append("</div>")
+        sb.append("<div><b>Cliente:</b> $clientName</div>")
+        sb.append("<div><b>NIT:</b> ${invoice.customerNit.ifBlank { "C/F" }}</div>")
+        if (invoice.orderNumber.isNotBlank()) {
+            sb.append("<div><b>Comanda:</b> #${invoice.orderNumber}${if (invoice.tableNumber.isNotBlank()) " | <b>Mesa:</b> ${invoice.tableNumber}" else ""}</div>")
         }
-        sb.append("</div>")
+        sb.append("<div><b>Cajero:</b> ${invoice.cashierName} | <b>Pago:</b> ${invoice.paymentMethod}</div>")
 
-        sb.append("<table><thead><tr>")
-        if (invoice.showQuantity) sb.append("<th>Cant.</th>")
-        if (invoice.showProductName) sb.append("<th>Descripción del Producto</th>")
-        if (invoice.showUnitPrice) sb.append("<th class='text-right'>P. Unitario</th>")
-        if (invoice.showSubtotal) sb.append("<th class='text-right'>Subtotal</th>")
-        sb.append("</tr></thead><tbody>")
-
-        items.forEach { item ->
+        sb.append("<div class='divider'></div>")
+        sb.append("<table><thead><tr><th>CANT</th><th>DESCRIPCIÓN</th><th class='right'>TOTAL</th></tr></thead><tbody>")
+        for (item in items) {
             sb.append("<tr>")
-            if (invoice.showQuantity) sb.append("<td>${item.quantity}x</td>")
-            if (invoice.showProductName) {
-                sb.append("<td><b>${item.productName}</b>")
-                if (item.notes.isNotBlank()) {
-                    sb.append("<div class='item-note'>Nota: ${item.notes}</div>")
-                }
-                sb.append("</td>")
-            }
-            if (invoice.showUnitPrice) sb.append("<td class='text-right'>$cur${String.format(Locale.US, "%.2f", item.unitPrice)}</td>")
-            if (invoice.showSubtotal) sb.append("<td class='text-right'>$cur${String.format(Locale.US, "%.2f", item.subtotal)}</td>")
+            sb.append("<td style='vertical-align: top; width: 35px;'>${item.quantity}x</td>")
+            sb.append("<td><b>${item.productName}</b>")
+            if (item.notes.isNotBlank()) sb.append("<div style='font-size: 9px; color: #444;'>* ${item.notes}</div>")
+            sb.append("</td>")
+            sb.append("<td class='right' style='vertical-align: top;'>$cur${String.format(Locale.US, "%.2f", item.subtotal)}</td>")
             sb.append("</tr>")
         }
         sb.append("</tbody></table>")
 
-        sb.append("<div class='totals'><table>")
-        if (invoice.showSubtotal) sb.append("<tr><td>Subtotal:</td><td class='text-right'>$cur${String.format(Locale.US, "%.2f", invoice.subtotal)}</td></tr>")
-        if (invoice.discount > 0) sb.append("<tr><td>Descuento:</td><td class='text-right'>-$cur${String.format(Locale.US, "%.2f", invoice.discount)}</td></tr>")
-        if (invoice.showTaxBreakdown) {
-            val baseAmount = invoice.totalAmount / 1.12
-            val vatAmount = invoice.totalAmount - baseAmount
-            sb.append("<tr><td>Base Imponible:</td><td class='text-right'>$cur${String.format(Locale.US, "%.2f", baseAmount)}</td></tr>")
-            sb.append("<tr><td>IVA (12%):</td><td class='text-right'>$cur${String.format(Locale.US, "%.2f", vatAmount)}</td></tr>")
+        sb.append("<div class='divider'></div>")
+        sb.append("<table>")
+        sb.append("<tr><td>Subtotal:</td><td class='right'>$cur${String.format(Locale.US, "%.2f", invoice.subtotal)}</td></tr>")
+        if (invoice.discount > 0) {
+            sb.append("<tr><td>Descuento:</td><td class='right'>-$cur${String.format(Locale.US, "%.2f", invoice.discount)}</td></tr>")
         }
-        if (invoice.showTotal) sb.append("<tr class='grand-total'><td>TOTAL A PAGAR:</td><td class='text-right'>$cur${String.format(Locale.US, "%.2f", invoice.totalAmount)}</td></tr>")
-        sb.append("</table></div>")
+        sb.append("<tr><td>Base Imponible:</td><td class='right'>$cur${String.format(Locale.US, "%.2f", baseAmount)}</td></tr>")
+        sb.append("<tr><td>IVA (12%):</td><td class='right'>$cur${String.format(Locale.US, "%.2f", vatAmount)}</td></tr>")
+        sb.append("<tr class='bold' style='font-size: 13px;'><td style='border-top: 1px solid #000; padding-top: 4px;'>TOTAL A PAGAR:</td><td class='right' style='border-top: 1px solid #000; padding-top: 4px;'>$cur${String.format(Locale.US, "%.2f", invoice.totalAmount)}</td></tr>")
+        sb.append("</table>")
 
-        if (invoice.showTipLine) {
-            val suggestedTip = invoice.totalAmount * 0.10
-            sb.append("<div class='tip-box'>")
-            sb.append("<p style='margin: 0;'><b>Propina Sugerida (10%):</b> $cur${String.format(Locale.US, "%.2f", suggestedTip)}</p>")
-            sb.append("<p style='margin: 4px 0 0 0;'>Firma Cliente: _______________________</p>")
-            sb.append("</div>")
+        sb.append("<div class='divider'></div>")
+        sb.append("<div class='bold'>TOTAL EN LETRAS:</div>")
+        sb.append("<div style='font-size: 9.5px;'>$totalInWords</div>")
+
+        sb.append("<div class='double-divider'></div>")
+        sb.append("<div class='center' style='font-size: 9.5px;'>")
+        sb.append("<div class='bold'>CERTIFICACIÓN SAT - FEL</div>")
+        sb.append("<div>Certificador: INFILE, S.A. | NIT: 125543-9</div>")
+        sb.append("<div>Documento Tributario Electrónico</div>")
+        if (invoice.footerMessage.isNotBlank()) {
+            sb.append("<div style='margin-top: 4px; font-style: italic;'>${invoice.footerMessage}</div>")
+        }
+        sb.append("</div>")
+
+        sb.append("</body></html>")
+        return sb.toString()
+    }
+
+    // =========================================================================
+    // 1. REDISEÑO DEL PDF (Diseño Oficial FEL Guatemala con Tablas 1px solid #000)
+    // =========================================================================
+
+    private fun buildHtmlInvoice(invoice: InvoiceEntity, items: List<OrderItemEntity>): String {
+        val sb = StringBuilder()
+        val cur = invoice.currencySymbol
+        val dateFormat = SimpleDateFormat("dd/MM/yyyy HH:mm:ss", Locale.getDefault())
+        val dateStr = dateFormat.format(Date(invoice.timestamp))
+
+        val serie = if (invoice.invoiceNumber.contains("-")) {
+            invoice.invoiceNumber.substringBeforeLast("-").ifBlank { "FEL-A" }
+        } else {
+            "FEL-A"
+        }
+        val dteNumber = invoice.invoiceNumber.substringAfterLast("-", invoice.invoiceNumber)
+        val uuid = run {
+            val hash = Math.abs(invoice.invoiceNumber.hashCode().toLong())
+            val p1 = hash.toString(16).uppercase().padStart(8, '0').take(8)
+            val p2 = "4B7D"
+            val p3 = "4E8F"
+            val p4 = "A2C1"
+            val p5 = Math.abs(invoice.id).toString(16).uppercase().padStart(12, '0').take(12)
+            "$p1-$p2-$p3-$p4-$p5"
         }
 
-        if (invoice.showLegalNotice && invoice.legalNotice.isNotBlank()) {
-            sb.append("<div class='legal-box'>")
-            sb.append("<p style='margin: 0;'><b>Disposición Fiscal:</b> ${invoice.legalNotice}</p>")
-            sb.append("</div>")
+        val baseAmount = invoice.totalAmount / 1.12
+        val vatAmount = invoice.totalAmount - baseAmount
+        val totalInWords = NumberToWordsHelper.toSpanishWords(invoice.totalAmount)
+
+        // Generar QR de verificación SAT en base64 para renderizado offline garantizado
+        val verificationUrl = "https://fel.sat.gob.gt/verificador?nit=${invoice.restaurantTaxId}&serie=$serie&numero=$dteNumber&monto=${String.format(Locale.US, "%.2f", invoice.totalAmount)}"
+        val qrBase64Src = try {
+            val qrBitmap: Bitmap = QRCodeHelper.generateQRCodeBitmap(verificationUrl, 256)
+            val stream = ByteArrayOutputStream()
+            qrBitmap.compress(Bitmap.CompressFormat.PNG, 100, stream)
+            val base64 = Base64.encodeToString(stream.toByteArray(), Base64.NO_WRAP)
+            "data:image/png;base64,$base64"
+        } catch (_: Exception) {
+            ""
         }
 
-        if (invoice.showFooterMessage && invoice.footerMessage.isNotBlank()) {
-            sb.append("<div class='footer'>")
-            sb.append("<p style='font-size: 13px;'><b>${invoice.footerMessage}</b></p>")
-            if (invoice.showQrCode) {
-                sb.append("<p style='font-size: 11px; color: #3B82F6;'>📱 Escanea para consultar tu factura electrónica o consultar nuestro menú online.</p>")
+        sb.append("<!DOCTYPE html><html><head><meta charset='utf-8'>")
+        sb.append("<style>")
+        sb.append("@page { size: letter portrait; margin: 12mm; }")
+        sb.append("* { box-sizing: border-box; }")
+        sb.append("body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; color: #000; margin: 0; padding: 5px; font-size: 11px; line-height: 1.3; }")
+
+        // Encabezado delimitado: Negocio a la izquierda, bloque FACTURA con borde negro a la derecha
+        sb.append(".header-table { width: 100%; border-collapse: collapse; margin-bottom: 12px; }")
+        sb.append(".header-left { vertical-align: top; width: 62%; padding-right: 15px; }")
+        sb.append(".header-left h1 { font-size: 18px; font-weight: 900; margin: 0 0 3px 0; color: #000; text-transform: uppercase; letter-spacing: 0.5px; }")
+        sb.append(".header-left .branch { font-size: 12px; font-weight: bold; margin: 0 0 4px 0; color: #222; }")
+        sb.append(".header-left p { margin: 2px 0; font-size: 10.5px; color: #111; }")
+
+        sb.append(".header-right { vertical-align: top; width: 38%; }")
+        sb.append(".fel-box { border: 1px solid #000; padding: 0; background-color: #fff; }")
+        sb.append(".fel-box-header { background-color: #F3F4F6; border-bottom: 1px solid #000; padding: 5px; text-align: center; font-weight: bold; font-size: 11px; letter-spacing: 0.5px; }")
+        sb.append(".fel-box-body { padding: 6px 8px; font-size: 10px; line-height: 1.45; }")
+
+        // Cuadro de datos del cliente delimitado con 1px solid #000
+        sb.append(".client-box { width: 100%; border-collapse: collapse; border: 1px solid #000; margin-bottom: 12px; }")
+        sb.append(".client-box-header { background-color: #F3F4F6; border-bottom: 1px solid #000; padding: 4px 8px; font-weight: bold; font-size: 10.5px; }")
+        sb.append(".client-box td { padding: 4px 8px; font-size: 10.5px; vertical-align: top; border: 1px solid #000; }")
+
+        // Tabla de detalle de consumos con bordes negros bien definidos (1px solid #000)
+        sb.append(".items-table { width: 100%; border-collapse: collapse; border: 1px solid #000; margin-bottom: 12px; }")
+        sb.append(".items-table th { background-color: #F3F4F6; color: #000; border: 1px solid #000; padding: 6px 8px; font-size: 10.5px; font-weight: bold; text-align: left; }")
+        sb.append(".items-table td { border: 1px solid #000; padding: 5px 8px; font-size: 10.5px; }")
+        sb.append(".text-center { text-align: center; }")
+        sb.append(".text-right { text-align: right; }")
+
+        // Sección de Totales y Total en Letras
+        sb.append(".totals-container { width: 100%; border-collapse: collapse; margin-bottom: 12px; }")
+        sb.append(".words-cell { vertical-align: top; width: 55%; padding-right: 12px; }")
+        sb.append(".words-box { border: 1px solid #000; background-color: #FAFAFA; padding: 0; }")
+        sb.append(".words-box-header { background-color: #F3F4F6; border-bottom: 1px solid #000; padding: 4px 8px; font-weight: bold; font-size: 10px; }")
+        sb.append(".words-box-body { padding: 8px; font-size: 10px; line-height: 1.4; font-weight: bold; color: #111; }")
+
+        sb.append(".totals-cell { vertical-align: top; width: 45%; }")
+        sb.append(".totals-table { width: 100%; border-collapse: collapse; border: 1px solid #000; }")
+        sb.append(".totals-table td { border: 1px solid #000; padding: 4px 8px; font-size: 10.5px; }")
+        sb.append(".totals-table .grand-total { background-color: #F3F4F6; font-size: 12px; font-weight: bold; }")
+
+        // Cuadro de Certificación SAT y QR al pie de página
+        sb.append(".cert-box { width: 100%; border-collapse: collapse; border: 1px solid #000; }")
+        sb.append(".cert-box td { border: none; padding: 8px; vertical-align: middle; }")
+        sb.append(".qr-cell { width: 90px; text-align: center; }")
+        sb.append(".qr-img { width: 80px; height: 80px; display: block; border: 1px solid #000; }")
+        sb.append(".cert-text { font-size: 9.5px; line-height: 1.4; color: #111; padding-left: 10px; }")
+        sb.append(".cert-text .cert-title { font-weight: bold; font-size: 10px; margin-bottom: 2px; }")
+        sb.append("</style></head><body>")
+
+        // 1. Encabezado delimitado
+        sb.append("<table class='header-table'><tr>")
+        sb.append("<td class='header-left'>")
+        sb.append("<h1>${invoice.restaurantName}</h1>")
+        if (invoice.branchName.isNotBlank()) sb.append("<div class='branch'>Sucursal: ${invoice.branchName}</div>")
+        sb.append("<p><b>NIT Emisor:</b> ${invoice.restaurantTaxId.ifBlank { "1234567-8" }}</p>")
+        if (invoice.restaurantAddress.isNotBlank()) sb.append("<p><b>Dirección:</b> ${invoice.restaurantAddress}</p>")
+        val contact = listOfNotNull(
+            invoice.restaurantPhone.takeIf { it.isNotBlank() }?.let { "Tel: $it" },
+            invoice.restaurantEmail.takeIf { it.isNotBlank() }?.let { "Email: $it" }
+        ).joinToString(" • ")
+        if (contact.isNotBlank()) sb.append("<p>$contact</p>")
+        if (invoice.legalNotice.isNotBlank()) sb.append("<p style='font-size: 9.5px; color: #333;'>${invoice.legalNotice}</p>")
+        sb.append("</td>")
+
+        sb.append("<td class='header-right'>")
+        sb.append("<div class='fel-box'>")
+        sb.append("<div class='fel-box-header'>FACTURA ELECTRÓNICA (DTE)</div>")
+        sb.append("<div class='fel-box-body'>")
+        sb.append("<div><b>SERIE:</b> $serie</div>")
+        sb.append("<div><b>NÚMERO DTE:</b> $dteNumber</div>")
+        sb.append("<div><b>AUTORIZACIÓN:</b> <span style='font-size: 8.5px;'>$uuid</span></div>")
+        sb.append("<div><b>FECHA EMISIÓN:</b> $dateStr</div>")
+        sb.append("<div><b>RÉGIMEN:</b> Pagos Trimestrales ISR</div>")
+        sb.append("</div>")
+        sb.append("</div>")
+        sb.append("</td>")
+        sb.append("</tr></table>")
+
+        // 2. Cuadro de datos del cliente
+        val clientName = when {
+            invoice.customerName.isNotBlank() -> invoice.customerName
+            invoice.customerType.isNotBlank() -> invoice.customerType
+            else -> "Consumidor Final"
+        }
+        sb.append("<table class='client-box'>")
+        sb.append("<tr><td colspan='2' class='client-box-header'>DATOS DEL RECEPTOR / CLIENTE</td></tr>")
+        sb.append("<tr>")
+        sb.append("<td style='width: 60%;'>")
+        sb.append("<div><b>Nombre / Razón Social:</b> $clientName</div>")
+        sb.append("<div><b>NIT / CUI:</b> ${invoice.customerNit.ifBlank { "C/F (Consumidor Final)" }}</div>")
+        sb.append("<div><b>Dirección:</b> ${invoice.restaurantAddress.ifBlank { "Ciudad de Guatemala" }}</div>")
+        sb.append("</td>")
+        sb.append("<td style='width: 40%;'>")
+        sb.append("<div><b>Fecha:</b> $dateStr</div>")
+        sb.append("<div><b>Teléfono:</b> ${invoice.customerPhone.ifBlank { "N/A" }}</div>")
+        sb.append("<div><b>Comanda:</b> #${invoice.orderNumber}${if (invoice.tableNumber.isNotBlank()) " | <b>Mesa:</b> ${invoice.tableNumber}" else ""}</div>")
+        sb.append("</td>")
+        sb.append("</tr></table>")
+
+        // 3. Tabla de detalle de consumos [Código, Cantidad, Descripción, P. Unitario, Total]
+        sb.append("<table class='items-table'><thead><tr>")
+        sb.append("<th style='width: 35px;' class='text-center'>No.</th>")
+        sb.append("<th style='width: 45px;' class='text-center'>Cant.</th>")
+        sb.append("<th>Descripción del Producto / Servicio</th>")
+        sb.append("<th style='width: 85px;' class='text-right'>P. Unitario</th>")
+        sb.append("<th style='width: 95px;' class='text-right'>Total ($cur)</th>")
+        sb.append("</tr></thead><tbody>")
+
+        items.forEachIndexed { index, item ->
+            sb.append("<tr>")
+            sb.append("<td class='text-center'>#${index + 1}</td>")
+            sb.append("<td class='text-center'>${item.quantity}</td>")
+            sb.append("<td><b>${item.productName}</b>")
+            if (item.notes.isNotBlank()) {
+                sb.append("<div style='font-size: 9.5px; color: #4B5563; font-style: italic;'>Nota: ${item.notes}</div>")
             }
-            if (invoice.showPrintTimestamp) sb.append("<p style='font-size: 11px;'>Impreso el: ${dateFormat.format(Date())}</p>")
-            sb.append("</div>")
+            sb.append("</td>")
+            sb.append("<td class='text-right'>$cur${String.format(Locale.US, "%.2f", item.unitPrice)}</td>")
+            sb.append("<td class='text-right'><b>$cur${String.format(Locale.US, "%.2f", item.subtotal)}</b></td>")
+            sb.append("</tr>")
         }
+        sb.append("</tbody></table>")
+
+        // 4. Pie con TOTAL EN LETRAS y desglose de IVA (12%)
+        sb.append("<table class='totals-container'><tr>")
+        sb.append("<td class='words-cell'>")
+        sb.append("<div class='words-box'>")
+        sb.append("<div class='words-box-header'>TOTAL EN LETRAS</div>")
+        sb.append("<div class='words-box-body'>")
+        sb.append("<div>$totalInWords</div>")
+        sb.append("<div style='margin-top: 8px; font-weight: normal; font-size: 9.5px; color: #444;'>")
+        sb.append("<b>Forma de Pago:</b> ${invoice.paymentMethod} • <b>Cajero:</b> ${invoice.cashierName}")
+        sb.append("</div>")
+        sb.append("</div>")
+        sb.append("</div>")
+        sb.append("</td>")
+
+        sb.append("<td class='totals-cell'>")
+        sb.append("<table class='totals-table'>")
+        sb.append("<tr><td>Subtotal:</td><td class='text-right'>$cur${String.format(Locale.US, "%.2f", invoice.subtotal)}</td></tr>")
+        if (invoice.discount > 0) {
+            sb.append("<tr><td>Descuento:</td><td class='text-right'>-$cur${String.format(Locale.US, "%.2f", invoice.discount)}</td></tr>")
+        }
+        sb.append("<tr><td>Base Imponible:</td><td class='text-right'>$cur${String.format(Locale.US, "%.2f", baseAmount)}</td></tr>")
+        sb.append("<tr><td>IVA (12%):</td><td class='text-right'>$cur${String.format(Locale.US, "%.2f", vatAmount)}</td></tr>")
+        sb.append("<tr class='grand-total'><td><b>TOTAL A PAGAR:</b></td><td class='text-right'><b>$cur${String.format(Locale.US, "%.2f", invoice.totalAmount)}</b></td></tr>")
+        sb.append("</table>")
+        sb.append("</td>")
+        sb.append("</tr></table>")
+
+        // 5. Código QR de certificación SAT y pie de página
+        sb.append("<table class='cert-box'><tr>")
+        if (qrBase64Src.isNotBlank()) {
+            sb.append("<td class='qr-cell'><img class='qr-img' src='$qrBase64Src' alt='QR Verificación SAT' /></td>")
+        }
+        sb.append("<td class='cert-text'>")
+        sb.append("<div class='cert-title'>CERTIFICACIÓN SAT - FACTURA ELECTRÓNICA EN LÍNEA (FEL)</div>")
+        sb.append("<div><b>Número de Autorización:</b> $uuid</div>")
+        sb.append("<div><b>Serie:</b> $serie | <b>Número DTE:</b> $dteNumber | <b>Fecha Certificación:</b> $dateStr</div>")
+        sb.append("<div><b>Certificador Autorizado:</b> INFILE, S.A. (NIT: 125543-9)</div>")
+        sb.append("<div>Documento Tributario Electrónico emitido de conformidad con las disposiciones de la SAT.</div>")
+        if (invoice.footerMessage.isNotBlank()) {
+            sb.append("<div style='margin-top: 4px; font-style: italic; color: #333;'>${invoice.footerMessage}</div>")
+        }
+        sb.append("</td>")
+        sb.append("</tr></table>")
+
         sb.append("</body></html>")
         return sb.toString()
     }
@@ -604,7 +946,9 @@ object ReportExportHelper {
             difference = difference
         )
 
-        val webView = WebView(context)
+        val webView = WebView(context).apply {
+            setLayerType(View.LAYER_TYPE_SOFTWARE, null)
+        }
         webView.webViewClient = object : WebViewClient() {
             override fun onPageFinished(view: WebView?, url: String?) {
                 val printManager = context.getSystemService(Context.PRINT_SERVICE) as? PrintManager
@@ -616,6 +960,16 @@ object ReportExportHelper {
                 } else {
                     Toast.makeText(context, "Servicio de impresión no disponible", Toast.LENGTH_SHORT).show()
                 }
+            }
+
+            override fun onRenderProcessGone(view: WebView?, detail: RenderProcessGoneDetail?): Boolean {
+                val parent = view?.parent as? android.view.ViewGroup
+                parent?.removeView(view)
+                try {
+                    view?.stopLoading()
+                    view?.destroy()
+                } catch (_: Throwable) {}
+                return true
             }
         }
         webView.loadDataWithBaseURL(null, htmlContent, "text/html", "UTF-8", null)

@@ -6,6 +6,8 @@ import android.net.Uri
 import android.print.PrintAttributes
 import android.print.PrintDocumentAdapter
 import android.print.PrintManager
+import android.view.View
+import android.webkit.RenderProcessGoneDetail
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.Toast
@@ -146,7 +148,9 @@ object ShoppingListExportHelper {
     // 3. PRINT OR EXPORT PDF
     fun printOrExportPdf(context: Context, items: List<InventoryItemEntity>) {
         val htmlContent = buildHtmlShoppingList(items)
-        val webView = WebView(context)
+        val webView = WebView(context).apply {
+            setLayerType(View.LAYER_TYPE_SOFTWARE, null)
+        }
         webView.webViewClient = object : WebViewClient() {
             override fun onPageFinished(view: WebView?, url: String?) {
                 val printManager = context.getSystemService(Context.PRINT_SERVICE) as? PrintManager
@@ -158,6 +162,16 @@ object ShoppingListExportHelper {
                 } else {
                     Toast.makeText(context, "Servicio de impresión no disponible", Toast.LENGTH_SHORT).show()
                 }
+            }
+
+            override fun onRenderProcessGone(view: WebView?, detail: RenderProcessGoneDetail?): Boolean {
+                val parent = view?.parent as? android.view.ViewGroup
+                parent?.removeView(view)
+                try {
+                    view?.stopLoading()
+                    view?.destroy()
+                } catch (_: Throwable) {}
+                return true
             }
         }
         webView.loadDataWithBaseURL(null, htmlContent, "text/html", "UTF-8", null)

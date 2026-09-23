@@ -100,7 +100,7 @@ abstract class AppDatabase : RoomDatabase() {
                     branchName = "Sucursal Central",
                     themePalette = "AZUL_RIVERA",
                     currencySymbol = "Q",
-                    website = "https://riveraga01-cmd.github.io/Restaurante-manager_app/",
+                    website = "https://riveraga01-cmd.github.io/Restaurante/",
                     managerPin = "1234"
                 )
             )
